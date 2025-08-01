@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de IR - Hype Empreendimentos</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-container">
+                <img src="Imagens/Imagem2.png" alt="Hype Empreendimentos" class="logo">
+            </div>
+            <h1>Gerador de Declaração de IR</h1>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="input-card">
+                    <div class="input-group">
+                        <label for="cpf">CPF do Cliente</label>
+                        <input 
+                            type="text" 
+                            id="cpf" 
+                            placeholder="000.000.000-00"
+                            maxlength="14"
+                        >
+                    </div>
+                    
+                    <button id="generateBtn" class="generate-btn">
+                        <i class="fas fa-file-pdf"></i>
+                        <span>Gerar Declaração</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Loading Section -->
+            <section id="loadingSection" class="loading-section hidden">
+                <div class="loading-card">
+                    <div class="spinner"></div>
+                    <p class="loading-text">Processando dados...</p>
+                </div>
+            </section>
+
+            <!-- Success Section -->
+            <section id="successSection" class="success-section hidden">
+                <div class="success-card">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>PDF Gerado com Sucesso</h3>
+                    <div id="clientInfo" class="client-info"></div>
+                    <button id="newSearchBtn" class="secondary-btn">
+                        <i class="fas fa-plus"></i>
+                        Nova Declaração
+                    </button>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section id="errorSection" class="error-section hidden">
+                <div class="error-card">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>Erro ao Processar</h3>
+                    <div id="errorDetails" class="error-details"></div>
+                    <button id="tryAgainBtn" class="secondary-btn">
+                        <i class="fas fa-refresh"></i>
+                        Tentar Novamente
+                    </button>
+                </div>
+            </section>
+        </main>
+
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
