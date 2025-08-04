@@ -899,11 +899,67 @@ if __name__ == "__main__":
 
 # Funções de interface para o servidor Flask
 def buscar_cliente_por_cpf(cpf):
-    """Interface para buscar cliente por CPF"""
+    """Interface para buscar cliente por CPF - VERSÃO OTIMIZADA"""
     try:
-        gerador = GeradorIR()
-        dados_cliente = gerador.buscador.buscar_por_cpf(cpf)
-        return dados_cliente
+        # Cache para busca de clientes
+        if not hasattr(buscar_cliente_por_cpf, '_client_cache'):
+            buscar_cliente_por_cpf._client_cache = {}
+            buscar_cliente_por_cpf._cache_timestamp = None
+        
+        # Verificar cache
+        cache_key = f"client_{cpf}"
+        if cache_key in buscar_cliente_por_cpf._client_cache:
+            return buscar_cliente_por_cpf._client_cache[cache_key]
+        
+        # Carregar dados se cache expirado
+        if not buscar_cliente_por_cpf._cache_timestamp:
+            logger.info("Carregando cache de clientes...")
+            buscar_cliente_por_cpf._client_cache = {}
+            
+            from config import FILES_CONFIG
+            from openpyxl import load_workbook
+            
+            wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True, read_only=True)
+            
+            if 'Base de Clientes' in wb.sheetnames:
+                ws = wb['Base de Clientes']
+                
+                # Ler apenas as primeiras 1000 linhas para performance
+                for row in range(2, min(ws.max_row + 1, 1000)):
+                    cpf_col = ws.cell(row=row, column=3).value  # Coluna C - CPF
+                    nome_col = ws.cell(row=row, column=2).value  # Coluna B - Nome
+                    empreendimento_col = ws.cell(row=row, column=4).value  # Coluna D - Empreendimento
+                    
+                    if cpf_col and nome_col:
+                        cpf_clean = str(cpf_col).replace('.', '').replace('-', '')
+                        cache_key_client = f"client_{cpf_clean}"
+                        
+                        buscar_cliente_por_cpf._client_cache[cache_key_client] = {
+                            'cliente': str(nome_col).strip(),
+                            'cpf': str(cpf_col).strip(),
+                            'empreendimento': str(empreendimento_col).strip() if empreendimento_col else ''
+                        }
+            
+            wb.close()
+            buscar_cliente_por_cpf._cache_timestamp = True
+        
+        # Buscar no cache
+        cpf_clean = str(cpf).replace('.', '').replace('-', '')
+        cache_key_clean = f"client_{cpf_clean}"
+        
+        if cache_key_clean in buscar_cliente_por_cpf._client_cache:
+            logger.info(f"Cliente encontrado por CPF exato: {buscar_cliente_por_cpf._client_cache[cache_key_clean]['cliente']}")
+            return buscar_cliente_por_cpf._client_cache[cache_key_clean]
+        
+        # Busca por similaridade de CPF se não encontrou exato
+        for cached_cpf, cliente_data in buscar_cliente_por_cpf._client_cache.items():
+            if cpf_clean in cached_cpf or cached_cpf in cpf_clean:
+                logger.info(f"Cliente encontrado por CPF similar: {cliente_data['cliente']}")
+                return cliente_data
+        
+        logger.warning(f"Cliente não encontrado para CPF: {cpf}")
+        return None
+        
     except Exception as e:
         logger.error(f"Erro ao buscar cliente por CPF {cpf}: {str(e)}")
         return None
@@ -948,14 +1004,138 @@ def _nomes_sao_similares_global(nome1, nome2, threshold=0.9):
     
     return similaridade >= threshold
 
+# Cache global para dados processados
+_excel_cache = {}
+_cache_timestamp = None
+_cache_file_path = None
+
+def _get_cache_key(cpf, dados_cliente):
+    """Gera chave única para cache"""
+    return f"{cpf}_{dados_cliente['cliente']}_{dados_cliente.get('empreendimento', '')}"
+
+def _is_cache_valid():
+    """Verifica se o cache ainda é válido"""
+    global _cache_timestamp, _cache_file_path
+    from config import FILES_CONFIG
+    import os
+    
+    if not _cache_timestamp or not _cache_file_path:
+        return False
+    
+    # Verificar se o arquivo Excel foi modificado
+    try:
+        current_mtime = os.path.getmtime(FILES_CONFIG['EXCEL_FILE'])
+        return current_mtime <= _cache_timestamp
+    except:
+        return False
+
+def _load_excel_data():
+    """Carrega dados do Excel de forma otimizada com cache"""
+    global _excel_cache, _cache_timestamp, _cache_file_path
+    from config import FILES_CONFIG
+    import os
+    
+    # Verificar se cache é válido
+    if _is_cache_valid():
+        logger.info("Usando cache de dados do Excel")
+        return _excel_cache
+    
+    logger.info("Carregando dados do Excel (cache expirado)")
+    
+    try:
+        # Carregar workbook
+        wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True, read_only=True)
+        
+        # Estrutura de dados otimizada
+        union_data = []
+        erp_data = []
+        
+        # Processar UNION-2024 de forma otimizada
+        if 'UNION - 2024' in wb.sheetnames:
+            ws_union = wb['UNION - 2024']
+            logger.info("Indexando dados UNION-2024...")
+            
+            # Ler apenas as colunas necessárias
+            for row in range(2, min(ws_union.max_row + 1, 2000)):  # Limitar a 2000 linhas
+                cliente = ws_union.cell(row=row, column=5).value
+                cpf = ws_union.cell(row=row, column=6).value
+                tipo = ws_union.cell(row=row, column=16).value
+                valor = ws_union.cell(row=row, column=7).value
+                
+                if cliente and tipo and valor and isinstance(valor, (int, float)):
+                    union_data.append({
+                        'cliente': str(cliente).strip(),
+                        'cpf': str(cpf).strip() if cpf else '',
+                        'tipo': str(tipo).upper(),
+                        'valor': float(valor)
+                    })
+        
+        # Processar UNIFICADA ERP de forma otimizada
+        if 'UNIFICADA ERP (paggo e dunning)' in wb.sheetnames:
+            ws_erp = wb['UNIFICADA ERP (paggo e dunning)']
+            logger.info("Indexando dados ERP...")
+            
+            # Ler apenas as colunas necessárias
+            for row in range(2, min(ws_erp.max_row + 1, 2000)):  # Limitar a 2000 linhas
+                empreendimento = ws_erp.cell(row=row, column=2).value
+                cpf = ws_erp.cell(row=row, column=6).value
+                valor = ws_erp.cell(row=row, column=17).value
+                
+                if valor and isinstance(valor, (int, float)):
+                    erp_data.append({
+                        'empreendimento': str(empreendimento).strip() if empreendimento else '',
+                        'cpf': str(cpf).strip() if cpf else '',
+                        'valor': float(valor)
+                    })
+        
+        wb.close()
+        
+        # Atualizar cache
+        _excel_cache = {
+            'union': union_data,
+            'erp': erp_data
+        }
+        _cache_timestamp = os.path.getmtime(FILES_CONFIG['EXCEL_FILE'])
+        _cache_file_path = FILES_CONFIG['EXCEL_FILE']
+        
+        logger.info(f"Cache atualizado: {len(union_data)} registros UNION, {len(erp_data)} registros ERP")
+        return _excel_cache
+        
+    except Exception as e:
+        logger.error(f"Erro ao carregar dados do Excel: {str(e)}")
+        return {'union': [], 'erp': []}
+
+def _match_cliente(nome_cliente, cpf_cliente, nome_planilha, cpf_planilha):
+    """Função otimizada para matching de cliente"""
+    # 1. Match por CPF (mais rápido)
+    if cpf_cliente and cpf_planilha:
+        cpf_clean = str(cpf_cliente).replace('.', '').replace('-', '')
+        cpf_planilha_clean = str(cpf_planilha).replace('.', '').replace('-', '')
+        if cpf_clean in cpf_planilha_clean or cpf_planilha_clean in cpf_clean:
+            return True, "CPF"
+    
+    # 2. Match por nome exato
+    if nome_cliente and nome_planilha:
+        if nome_cliente.strip().upper() == nome_planilha.strip().upper():
+            return True, "NOME_EXATO"
+    
+    # 3. Match por palavras-chave (otimizado)
+    if nome_cliente and nome_planilha:
+        palavras_cliente = set(p.strip().upper() for p in nome_cliente.split() if len(p.strip()) > 2)
+        palavras_planilha = set(p.strip().upper() for p in nome_planilha.split() if len(p.strip()) > 2)
+        
+        if len(palavras_cliente & palavras_planilha) >= 2:  # Interseção de conjuntos
+            return True, "NOME_SIMILAR"
+    
+    return False, ""
+
 def calcular_todos_valores_otimizado(cpf, dados_cliente):
-    """Calcula todos os valores financeiros de uma vez - VERSÃO CORRIGIDA E MELHORADA"""
+    """Calcula todos os valores financeiros com performance ultra-otimizada"""
     try:
         logger.info(f"Iniciando cálculo otimizado para {dados_cliente['cliente']}")
         
-        # Abrir planilha uma única vez com otimizações de memória
-        from config import FILES_CONFIG
-        wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True, read_only=True)
+        # Carregar dados do Excel (com cache)
+        excel_data = _load_excel_data()
         
         receita_bruta = 0
         despesas_acessorias = 0
@@ -964,108 +1144,46 @@ def calcular_todos_valores_otimizado(cpf, dados_cliente):
         
         nome_cliente = dados_cliente['cliente']
         cpf_cliente = dados_cliente['cpf']
-        empreendimento_cliente = dados_cliente['empreendimento']
+        empreendimento_cliente = dados_cliente.get('empreendimento', '')
         
-        # 1. Processar UNION-2024 (uma passada só) - BUSCA MELHORADA
-        if 'UNION - 2024' in wb.sheetnames:
-            ws_union = wb['UNION - 2024']
-            logger.info("Processando planilha UNION-2024...")
+        # Processar dados UNION (otimizado)
+        logger.info("Processando dados UNION...")
+        for registro in excel_data['union']:
+            match, match_type = _match_cliente(
+                nome_cliente, cpf_cliente,
+                registro['cliente'], registro['cpf']
+            )
             
-            # Otimização: limitar busca a 1000 linhas para performance
-            max_rows = min(ws_union.max_row, 1000)
-            for row in range(2, max_rows + 1):
-                cliente_col_e = ws_union.cell(row=row, column=5).value  # Nome do cliente
-                cpf_col_f = ws_union.cell(row=row, column=6).value      # CPF (pode estar inconsistente)
-                tipo_col_p = ws_union.cell(row=row, column=16).value    # Tipo
-                valor_col_g = ws_union.cell(row=row, column=7).value    # Valor
+            if match:
+                valor = registro['valor']
+                tipo = registro['tipo']
                 
-                # Verificar se há dados válidos
-                if not (cliente_col_e and tipo_col_p and valor_col_g and isinstance(valor_col_g, (int, float))):
-                    continue
-                
-                nome_planilha = str(cliente_col_e).strip()
-                tipo_upper = str(tipo_col_p).upper()
-                valor = float(valor_col_g)
-                
-                # BUSCA MELHORADA: verificar por nome E por CPF
-                match_encontrado = False
-                match_type = ""
-                
-                # 1. Verificar por nome exato
-                if nome_cliente.strip().upper() == nome_planilha.strip().upper():
-                    match_encontrado = True
-                    match_type = "NOME_EXATO"
-                    logger.debug(f"Match por nome exato: {nome_planilha}")
-                
-                # 2. Verificar por CPF (mesmo que inconsistente)
-                elif cpf_col_f and str(cpf_cliente) in str(cpf_col_f).replace('.', '').replace('-', ''):
-                    match_encontrado = True
-                    match_type = "CPF"
-                    logger.debug(f"Match por CPF: {cpf_col_f}")
-                
-                # 3. Verificar por similaridade de nome (fallback)
-                elif nome_cliente and nome_planilha:
-                    # Verificar se pelo menos 2 palavras principais são iguais
-                    palavras_cliente = [p for p in nome_cliente.strip().upper().split() if len(p) > 2]
-                    palavras_planilha = [p for p in nome_planilha.strip().upper().split() if len(p) > 2]
-                    
-                    palavras_comuns = 0
-                    for palavra_cliente in palavras_cliente:
-                        for palavra_planilha in palavras_planilha:
-                            if palavra_cliente == palavra_planilha:
-                                palavras_comuns += 1
-                                break
-                    
-                    if palavras_comuns >= 2:  # Pelo menos 2 palavras em comum
-                        match_encontrado = True
-                        match_type = "NOME_SIMILAR"
-                        logger.debug(f"Match por nome similar: {nome_planilha} vs {nome_cliente}")
-                
-                if match_encontrado:
-                    if "RECEITA BRUTA" in tipo_upper:
-                        receita_bruta += valor
-                        saldo_union += valor  # Saldo Union = Receita Bruta
-                        logger.debug(f"Receita encontrada ({match_type}): R$ {valor:,.2f} para {nome_planilha}")
-                    elif "ATIVO CIRCULANTE" in tipo_upper:
-                        despesas_acessorias += valor
-                        logger.debug(f"Despesa encontrada ({match_type}): R$ {valor:,.2f} para {nome_planilha}")
+                if "RECEITA BRUTA" in tipo:
+                    receita_bruta += valor
+                    saldo_union += valor
+                    logger.debug(f"Receita encontrada ({match_type}): R$ {valor:,.2f}")
+                elif "ATIVO CIRCULANTE" in tipo:
+                    despesas_acessorias += valor
+                    logger.debug(f"Despesa encontrada ({match_type}): R$ {valor:,.2f}")
         
-        # 2. Processar UNIFICADA ERP (uma passada só) - BUSCA MELHORADA
-        if 'UNIFICADA ERP (paggo e dunning)' in wb.sheetnames:
-            ws_erp = wb['UNIFICADA ERP (paggo e dunning)']
-            logger.info("Processando planilha UNIFICADA ERP...")
-            
-            # Otimização: limitar busca a 1000 linhas para performance
-            max_rows = min(ws_erp.max_row, 1000)
-            for row in range(2, max_rows + 1):
-                empreend_col_b = ws_erp.cell(row=row, column=2).value  # Empreendimento
-                cpf_col_f = ws_erp.cell(row=row, column=6).value       # CPF
-                valor_col_q = ws_erp.cell(row=row, column=17).value    # Valor
+        # Processar dados ERP (otimizado)
+        logger.info("Processando dados ERP...")
+        for registro in excel_data['erp']:
+            # Match por CPF primeiro (mais rápido)
+            if cpf_cliente and registro['cpf']:
+                cpf_clean = str(cpf_cliente).replace('.', '').replace('-', '')
+                cpf_planilha_clean = str(registro['cpf']).replace('.', '').replace('-', '')
                 
-                # Verificar se há dados válidos
-                if not (valor_col_q and isinstance(valor_col_q, (int, float))):
-                    continue
-                
-                # BUSCA MELHORADA: verificar por CPF E empreendimento
-                match_encontrado = False
-                
-                # 1. Verificar por CPF exato
-                if cpf_col_f and str(cpf_cliente) in str(cpf_col_f).replace('.', '').replace('-', ''):
-                    # Se tem empreendimento, verificar também
-                    if empreend_col_b and empreendimento_cliente:
-                        if empreendimento_cliente in str(empreend_col_b):
-                            match_encontrado = True
-                            logger.debug(f"Match ERP por CPF+Empreendimento: CPF={cpf_col_f}, Emp={empreend_col_b}")
+                if cpf_clean in cpf_planilha_clean or cpf_planilha_clean in cpf_clean:
+                    # Verificar empreendimento se disponível
+                    if empreendimento_cliente and registro['empreendimento']:
+                        if empreendimento_cliente in registro['empreendimento']:
+                            saldo_paggo_dunning += registro['valor']
+                            logger.debug(f"Saldo ERP encontrado (CPF+Emp): R$ {registro['valor']:,.2f}")
                     else:
-                        # Se não tem empreendimento para comparar, aceitar só por CPF
-                        match_encontrado = True
-                        logger.debug(f"Match ERP por CPF: {cpf_col_f}")
-                
-                if match_encontrado:
-                    saldo_paggo_dunning += float(valor_col_q)
-                    logger.debug(f"Saldo ERP encontrado: R$ {valor_col_q:,.2f}")
-        
-        wb.close()
+                        # Aceitar só por CPF se não tem empreendimento
+                        saldo_paggo_dunning += registro['valor']
+                        logger.debug(f"Saldo ERP encontrado (CPF): R$ {registro['valor']:,.2f}")
         
         logger.info(f"Cálculo concluído - Receita: R$ {receita_bruta:,.2f}, Despesas: R$ {despesas_acessorias:,.2f}")
         return receita_bruta, despesas_acessorias, saldo_union, saldo_paggo_dunning
@@ -1183,10 +1301,14 @@ def calcular_valores_financeiros_manual(cpf, dados_cliente):
         }
 
 def gerar_pdf_declaracao(cpf, dados_cliente, valores_calculados):
-    """Interface para gerar PDF da declaração"""
+    """Interface para gerar PDF da declaração - VERSÃO OTIMIZADA"""
     try:
-        gerador = GeradorIR()
-        nome_pdf = gerador.gerador_pdf.gerar_declaracao(cpf, dados_cliente, valores_calculados)
+        # Cache para gerador de PDF
+        if not hasattr(gerar_pdf_declaracao, '_pdf_generator'):
+            gerar_pdf_declaracao._pdf_generator = GeradorPDF()
+        
+        # Gerar PDF usando cache
+        nome_pdf = gerar_pdf_declaracao._pdf_generator.gerar_declaracao(cpf, dados_cliente, valores_calculados)
         return nome_pdf
     except Exception as e:
         logger.error(f"Erro ao gerar PDF para CPF {cpf}: {str(e)}")
