@@ -86,7 +86,7 @@ def add_security_headers(response):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data:;"
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     return response
 
@@ -564,7 +564,8 @@ def health_check():
             'status': status,
             'timestamp': datetime.now().isoformat(),
             'version': config['APP']['VERSION'],
-            'missing_files': missing_files if missing_files else None
+            'missing_files': missing_files if missing_files else None,
+            'environment': 'production' if not config['SERVER']['DEBUG'] else 'development'
         })
     except Exception as e:
         logger.error(f"Erro no health check: {str(e)}")
@@ -574,6 +575,15 @@ def health_check():
             'version': config['APP']['VERSION'],
             'error': str(e)
         }), 500
+
+@app.route('/api/test')
+def test_endpoint():
+    """Endpoint de teste simples"""
+    return jsonify({
+        'message': 'API funcionando corretamente',
+        'timestamp': datetime.now().isoformat(),
+        'status': 'success'
+    })
 
 # Handlers de erro
 @app.errorhandler(400)

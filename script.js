@@ -85,7 +85,7 @@ async function handleGenerate() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ cpf: cpfClean }),
-            signal: AbortSignal.timeout(60000) // 60 segundos de timeout
+            signal: AbortSignal.timeout(300000) // 5 minutos de timeout para produção
         });
         
         let result;
