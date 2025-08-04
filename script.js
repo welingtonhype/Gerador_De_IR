@@ -89,22 +89,46 @@ async function handleGenerate() {
         });
         
         let result;
+        let responseText = '';
+        
         try {
-            result = await response.json();
-        } catch (error) {
-            console.error('Erro ao parsear JSON:', error);
-            console.error('Response text:', await response.text());
+            // Primeiro, tentar ler como texto para debug
+            responseText = await response.text();
+            console.log('Response status:', response.status);
+            console.log('Response text:', responseText);
             
-            // Se não conseguir parsear JSON, provavelmente é um erro HTML
+            // Tentar parsear como JSON
+            try {
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('Erro ao parsear JSON:', parseError);
+                
+                // Se não conseguir parsear JSON, provavelmente é um erro HTML
+                displayError({
+                    message: 'Erro interno do servidor',
+                    details: {
+                        tipo: 'ERRO_SERVIDOR',
+                        descricao: 'O servidor retornou uma resposta inválida',
+                        detalhes: [
+                            'O servidor pode estar temporariamente indisponível',
+                            'Tente novamente em alguns instantes',
+                            'Se o problema persistir, entre em contato com o suporte'
+                        ]
+                    }
+                });
+                return;
+            }
+        } catch (error) {
+            console.error('Erro ao ler response:', error);
             displayError({
-                message: 'Erro interno do servidor',
+                message: 'Erro de conexão',
                 details: {
-                    tipo: 'ERRO_SERVIDOR',
-                    descricao: 'O servidor retornou uma resposta inválida',
+                    tipo: 'ERRO_CONEXAO',
+                    descricao: 'Não foi possível ler a resposta do servidor',
                     detalhes: [
+                        'Verifique sua conexão com a internet',
                         'O servidor pode estar temporariamente indisponível',
-                        'Tente novamente em alguns instantes',
-                        'Se o problema persistir, entre em contato com o suporte'
+                        'Tente novamente em alguns instantes'
                     ]
                 }
             });

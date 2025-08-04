@@ -591,7 +591,16 @@ def test_endpoint():
     return jsonify({
         'message': 'API funcionando corretamente',
         'timestamp': datetime.now().isoformat(),
-        'status': 'success'
+        'status': 'success',
+        'environment': 'production' if not config['SERVER']['DEBUG'] else 'development'
+    })
+
+@app.route('/api/simple-test')
+def simple_test():
+    """Teste muito simples"""
+    return jsonify({
+        'success': True,
+        'message': 'Teste simples funcionando'
     })
 
 @app.route('/api/test-pdf', methods=['POST'])
@@ -674,9 +683,13 @@ def internal_error(error):
     """Handler para erros internos"""
     logger.error(f"Erro interno: {str(error)}")
     logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    # Retornar JSON mesmo em caso de erro
     return jsonify({
         'success': False,
-        'message': 'Erro interno do servidor'
+        'message': 'Erro interno do servidor',
+        'error_type': type(error).__name__,
+        'timestamp': datetime.now().isoformat()
     }), 500
 
 @app.errorhandler(Exception)
