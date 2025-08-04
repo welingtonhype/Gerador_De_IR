@@ -97,27 +97,62 @@ async function handleGenerate() {
             console.log('Response status:', response.status);
             console.log('Response text:', responseText);
             
-            // Tentar parsear como JSON
-            try {
-                result = JSON.parse(responseText);
-            } catch (parseError) {
-                console.error('Erro ao parsear JSON:', parseError);
-                
-                // Se não conseguir parsear JSON, provavelmente é um erro HTML
-                displayError({
-                    message: 'Erro interno do servidor',
-                    details: {
-                        tipo: 'ERRO_SERVIDOR',
-                        descricao: 'O servidor retornou uma resposta inválida',
-                        detalhes: [
-                            'O servidor pode estar temporariamente indisponível',
-                            'Tente novamente em alguns instantes',
-                            'Se o problema persistir, entre em contato com o suporte'
-                        ]
-                    }
-                });
-                return;
-            }
+                         // Tentar parsear como JSON
+             try {
+                 // Se a resposta estiver vazia, tratar como erro de servidor
+                 if (!responseText || responseText.trim() === '') {
+                     console.error('Response vazia - Status:', response.status);
+                     
+                     if (response.status === 502) {
+                         displayError({
+                             message: 'Servidor temporariamente indisponível',
+                             details: {
+                                 tipo: 'BAD_GATEWAY',
+                                 descricao: 'O servidor está temporariamente indisponível',
+                                 detalhes: [
+                                     'O servidor pode estar reiniciando',
+                                     'Tente novamente em alguns instantes',
+                                     'Se o problema persistir, aguarde alguns minutos'
+                                 ]
+                             }
+                         });
+                     } else {
+                         displayError({
+                             message: 'Erro interno do servidor',
+                             details: {
+                                 tipo: 'ERRO_SERVIDOR',
+                                 descricao: 'O servidor retornou uma resposta vazia',
+                                 detalhes: [
+                                     'O servidor pode estar temporariamente indisponível',
+                                     'Tente novamente em alguns instantes',
+                                     'Se o problema persistir, entre em contato com o suporte'
+                                 ]
+                             }
+                         });
+                     }
+                     return;
+                 }
+                 
+                 result = JSON.parse(responseText);
+             } catch (parseError) {
+                 console.error('Erro ao parsear JSON:', parseError);
+                 console.error('Response text:', responseText);
+                 
+                 // Se não conseguir parsear JSON, provavelmente é um erro HTML
+                 displayError({
+                     message: 'Erro interno do servidor',
+                     details: {
+                         tipo: 'ERRO_SERVIDOR',
+                         descricao: 'O servidor retornou uma resposta inválida',
+                         detalhes: [
+                             'O servidor pode estar temporariamente indisponível',
+                             'Tente novamente em alguns instantes',
+                             'Se o problema persistir, entre em contato com o suporte'
+                         ]
+                     }
+                 });
+                 return;
+             }
         } catch (error) {
             console.error('Erro ao ler response:', error);
             displayError({

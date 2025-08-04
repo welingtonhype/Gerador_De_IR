@@ -692,6 +692,20 @@ def internal_error(error):
         'timestamp': datetime.now().isoformat()
     }), 500
 
+@app.errorhandler(502)
+def bad_gateway(error):
+    """Handler para erros de gateway"""
+    logger.error(f"Bad Gateway: {str(error)}")
+    logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    return jsonify({
+        'success': False,
+        'message': 'Servidor temporariamente indisponível',
+        'error_type': 'BAD_GATEWAY',
+        'timestamp': datetime.now().isoformat(),
+        'details': 'O servidor está temporariamente indisponível. Tente novamente em alguns instantes.'
+    }), 502
+
 @app.errorhandler(Exception)
 def handle_exception(error):
     """Handler genérico para exceções não tratadas"""
