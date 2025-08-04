@@ -324,6 +324,9 @@ def buscar_cliente():
 def buscar_e_gerar_pdf():
     """API para buscar cliente e gerar PDF em uma única operação"""
     logger.info(f"Recebida requisição para buscar-e-gerar-pdf")
+    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"Content-Type: {request.content_type}")
+    
     try:
         # Validar dados de entrada
         if not request.is_json:
@@ -411,8 +414,14 @@ def buscar_e_gerar_pdf():
             'success': False,
             'message': 'Erro interno do servidor',
             'error_type': type(e).__name__,
-            'error_message': str(e)
+            'error_message': str(e),
+            'timestamp': datetime.now().isoformat()
         }
+        
+        # Log adicional para debug
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error(f"Error args: {e.args if hasattr(e, 'args') else 'N/A'}")
         
         return jsonify(error_details), 500
 
@@ -584,6 +593,53 @@ def test_endpoint():
         'timestamp': datetime.now().isoformat(),
         'status': 'success'
     })
+
+@app.route('/api/test-pdf', methods=['POST'])
+def test_pdf_generation():
+    """Teste específico para geração de PDF"""
+    try:
+        logger.info("Teste de geração de PDF iniciado")
+        
+        # Verificar se os módulos estão disponíveis
+        try:
+            from Scripts.gerador_ir_refatorado import buscar_cliente_por_cpf
+            logger.info("✅ Módulo gerador_ir_refatorado importado com sucesso")
+        except Exception as e:
+            logger.error(f"❌ Erro ao importar módulo: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Erro ao importar módulo: {str(e)}'
+            }), 500
+        
+        # Testar busca de cliente
+        try:
+            dados_cliente = buscar_cliente_por_cpf('43445950091')
+            if dados_cliente:
+                logger.info(f"✅ Cliente encontrado: {dados_cliente['cliente']}")
+                return jsonify({
+                    'success': True,
+                    'message': 'Teste de busca de cliente passou',
+                    'cliente': dados_cliente['cliente']
+                })
+            else:
+                logger.warning("⚠️ Cliente não encontrado no teste")
+                return jsonify({
+                    'success': False,
+                    'message': 'Cliente não encontrado no teste'
+                }), 404
+        except Exception as e:
+            logger.error(f"❌ Erro na busca de cliente: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Erro na busca de cliente: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"❌ Erro geral no teste: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro geral: {str(e)}'
+        }), 500
 
 # Handlers de erro
 @app.errorhandler(400)
