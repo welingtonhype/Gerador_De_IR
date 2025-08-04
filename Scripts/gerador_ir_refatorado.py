@@ -953,9 +953,9 @@ def calcular_todos_valores_otimizado(cpf, dados_cliente):
     try:
         logger.info(f"Iniciando cálculo otimizado para {dados_cliente['cliente']}")
         
-        # Abrir planilha uma única vez
+        # Abrir planilha uma única vez com otimizações de memória
         from config import FILES_CONFIG
-        wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True)
+        wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True, read_only=True)
         
         receita_bruta = 0
         despesas_acessorias = 0
@@ -1101,7 +1101,7 @@ def calcular_valores_financeiros_manual(cpf, dados_cliente):
         try:
             from config import FILES_CONFIG
             from openpyxl import load_workbook
-            wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True)
+            wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True, read_only=True)
             if 'Base de Clientes' in wb.sheetnames:
                 ws_base = wb['Base de Clientes']
                 for row in range(2, ws_base.max_row + 1):
