@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: chmod +x render-build.sh && ./render-build.sh
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --max-requests 1000 --max-requests-jitter 100 server:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 300 --max-requests 100 --max-requests-jitter 10 server:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.18
@@ -15,10 +15,10 @@ services:
       - key: DEBUG
         value: false
       - key: WORKERS
-        value: 2
+        value: 1
       - key: TIMEOUT
-        value: 120
+        value: 300
       - key: MAX_REQUESTS
-        value: 1000
+        value: 100
       - key: MAX_REQUESTS_JITTER
-        value: 100 
+        value: 10 

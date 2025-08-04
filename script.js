@@ -1,5 +1,5 @@
 // Configurações
-const API_BASE = '/api';
+const API_BASE = window.location.origin + '/api';
 
 // Elementos do DOM
 const elements = {
@@ -84,10 +84,32 @@ async function handleGenerate() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ cpf: cpfClean })
+            body: JSON.stringify({ cpf: cpfClean }),
+            signal: AbortSignal.timeout(60000) // 60 segundos de timeout
         });
         
-        const result = await response.json();
+        let result;
+        try {
+            result = await response.json();
+        } catch (error) {
+            console.error('Erro ao parsear JSON:', error);
+            console.error('Response text:', await response.text());
+            
+            // Se não conseguir parsear JSON, provavelmente é um erro HTML
+            displayError({
+                message: 'Erro interno do servidor',
+                details: {
+                    tipo: 'ERRO_SERVIDOR',
+                    descricao: 'O servidor retornou uma resposta inválida',
+                    detalhes: [
+                        'O servidor pode estar temporariamente indisponível',
+                        'Tente novamente em alguns instantes',
+                        'Se o problema persistir, entre em contato com o suporte'
+                    ]
+                }
+            });
+            return;
+        }
         
         if (response.ok && result.success) {
             // Download do PDF
@@ -106,22 +128,65 @@ async function handleGenerate() {
             
         } else {
             // Mostrar erro
-            displayError(result);
+            if (response.status === 404) {
+                displayError({
+                    message: 'Cliente não encontrado',
+                    details: {
+                        tipo: 'CLIENTE_NAO_ENCONTRADO',
+                        descricao: 'O CPF informado não foi encontrado na base de dados',
+                        detalhes: [
+                            'Verifique se o CPF está correto',
+                            'Certifique-se de que o cliente está cadastrado no sistema'
+                        ]
+                    }
+                });
+            } else if (response.status === 500) {
+                displayError({
+                    message: 'Erro interno do servidor',
+                    details: {
+                        tipo: 'ERRO_SERVIDOR',
+                        descricao: 'Ocorreu um erro interno no servidor',
+                        detalhes: [
+                            'O servidor pode estar temporariamente indisponível',
+                            'Tente novamente em alguns instantes',
+                            'Se o problema persistir, entre em contato com o suporte'
+                        ]
+                    }
+                });
+            } else {
+                displayError(result);
+            }
         }
         
     } catch (error) {
         console.error('Erro na requisição:', error);
+        
+        // Determinar o tipo de erro específico
+        let errorMessage = 'Erro de conexão';
+        let errorDetails = {
+            tipo: 'ERRO_CONEXAO',
+            descricao: 'Não foi possível conectar com o servidor',
+            detalhes: [
+                'Verifique sua conexão com a internet',
+                'Certifique-se de que o servidor está funcionando',
+                'Tente novamente em alguns instantes'
+            ]
+        };
+        
+        // Se for um erro de rede específico
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            errorMessage = 'Servidor não disponível';
+            errorDetails.descricao = 'O servidor não está respondendo';
+            errorDetails.detalhes = [
+                'O servidor pode estar temporariamente indisponível',
+                'Verifique se a URL está correta',
+                'Tente novamente em alguns instantes'
+            ];
+        }
+        
         displayError({
-            message: 'Erro de conexão',
-            details: {
-                tipo: 'ERRO_CONEXAO',
-                descricao: 'Não foi possível conectar com o servidor',
-                detalhes: [
-                    'Verifique sua conexão com a internet',
-                    'Certifique-se de que o servidor está funcionando',
-                    'Tente novamente em alguns instantes'
-                ]
-            }
+            message: errorMessage,
+            details: errorDetails
         });
     }
     

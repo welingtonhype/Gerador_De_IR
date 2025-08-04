@@ -16,40 +16,15 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
 # Virtual Environment
-.env
-.venv
-env/
 venv/
+env/
 ENV/
-env.bak/
-venv.bak/
-
-# PDFs gerados (não precisam ir para o Git)
-*.pdf
-Declaracao_IR_*.pdf
-
-# Logs
-logs/
-*.log
-
-# Sistema
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Backup files
-*_backup_*
-
-# Temporary files
-temp/
-tmp/
 
 # IDE
 .vscode/
@@ -57,9 +32,18 @@ tmp/
 *.swp
 *.swo
 
+# Logs
+*.log
+logs/
+
+# Generated PDFs
+*.pdf
+generated_pdfs/
+
 # OS
 .DS_Store
 Thumbs.db
 
-# Render specific
-.render-buildlogs/
+# Temporary files
+*.tmp
+*.temp

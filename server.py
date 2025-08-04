@@ -86,7 +86,7 @@ def add_security_headers(response):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;"
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     return response
 
@@ -323,9 +323,11 @@ def buscar_cliente():
 @limiter.limit("3 per minute")
 def buscar_e_gerar_pdf():
     """API para buscar cliente e gerar PDF em uma única operação"""
+    logger.info(f"Recebida requisição para buscar-e-gerar-pdf")
     try:
         # Validar dados de entrada
         if not request.is_json:
+            logger.warning("Content-Type não é application/json")
             return jsonify({
                 'success': False,
                 'message': 'Content-Type deve ser application/json'
@@ -354,6 +356,7 @@ def buscar_e_gerar_pdf():
         logger.info(f"Buscando cliente e gerando PDF para CPF: {cpf_clean}")
         
         # Buscar dados do cliente (usar cache se disponível)
+        logger.info(f"Verificando cache para CPF: {cpf_clean}")
         if cpf_clean in dados_cache:
             logger.info(f"Usando dados do cache: {cpf_clean}")
             cached_data = dados_cache[cpf_clean]
@@ -361,6 +364,7 @@ def buscar_e_gerar_pdf():
             valores_calculados = cached_data['valores_calculados']
         else:
             # Buscar e calcular tudo
+            logger.info(f"Buscando cliente no banco de dados: {cpf_clean}")
             dados_cliente = buscar_cliente_por_cpf(cpf_clean)
             
             if not dados_cliente:
@@ -370,6 +374,8 @@ def buscar_e_gerar_pdf():
                     'message': 'Cliente não encontrado na base de dados'
                 }), 404
             
+            logger.info(f"Cliente encontrado: {dados_cliente['cliente']}")
+            logger.info(f"Calculando valores financeiros...")
             valores_calculados = calcular_valores_financeiros_manual(cpf_clean, dados_cliente)
         
         # Gerar PDF
@@ -399,10 +405,16 @@ def buscar_e_gerar_pdf():
     except Exception as e:
         logger.error(f"Erro ao buscar e gerar PDF: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        return jsonify({
+        
+        # Retornar erro mais específico para debug
+        error_details = {
             'success': False,
-            'message': 'Erro interno do servidor'
-        }), 500
+            'message': 'Erro interno do servidor',
+            'error_type': type(e).__name__,
+            'error_message': str(e)
+        }
+        
+        return jsonify(error_details), 500
 
 @app.route('/api/gerar-pdf', methods=['POST'])
 @limiter.limit("5 per minute")

@@ -90,8 +90,11 @@ API_CONFIG = {
         'http://127.0.0.1:5000',
         'http://localhost:3000',
         'http://127.0.0.1:3000',
+        'http://localhost:10000',
+        'http://127.0.0.1:10000',
         'https://*.render.com',
-        'https://*.onrender.com'
+        'https://*.onrender.com',
+        '*'
     ]
 }
 
@@ -124,17 +127,17 @@ SECURITY_CONFIG = {
         'X-Frame-Options': 'DENY',
         'X-XSS-Protection': '1; mode=block',
         'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';",
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;",
         'Referrer-Policy': 'strict-origin-when-cross-origin'
     }
 }
 
 # Configurações de Performance
 PERFORMANCE_CONFIG = {
-    'WORKERS': int(os.environ.get('WORKERS', 2)),
-    'TIMEOUT': int(os.environ.get('TIMEOUT', 120)),
-    'MAX_REQUESTS': int(os.environ.get('MAX_REQUESTS', 1000)),
-    'MAX_REQUESTS_JITTER': int(os.environ.get('MAX_REQUESTS_JITTER', 100))
+    'WORKERS': int(os.environ.get('WORKERS', 1)),
+    'TIMEOUT': int(os.environ.get('TIMEOUT', 300)),
+    'MAX_REQUESTS': int(os.environ.get('MAX_REQUESTS', 100)),
+    'MAX_REQUESTS_JITTER': int(os.environ.get('MAX_REQUESTS_JITTER', 10))
 }
 
 # Configurações de Teste
