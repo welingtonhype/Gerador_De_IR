@@ -1,160 +1,121 @@
-# 🏢 Gerador de IR - Hype Empreendimentos
+# Gerador de IR - Hype Empreendimentos
 
-Sistema web para geração automática de declarações de Imposto de Renda baseado em dados de clientes.
+Sistema web para geração automática de declarações de Imposto de Renda para clientes da Hype Empreendimentos.
 
-## 📋 Visão Geral
+## 🚀 Deploy no Render
 
-Este sistema permite gerar declarações de IR em PDF a partir do CPF do cliente, consultando dados em planilha Excel e calculando automaticamente os valores financeiros necessários.
+Este projeto está otimizado para deploy no Render. Para fazer o deploy:
 
-## 🚀 Deploy Rápido
+### 1. Conectar ao Render
+- Acesse [render.com](https://render.com)
+- Conecte seu repositório GitHub
+- Selecione este repositório
 
-### Windows:
-```bash
-deploy.bat
+### 2. Configurar o Serviço
+- **Tipo**: Web Service
+- **Runtime**: Python 3.9
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --max-requests 1000 --max-requests-jitter 100 server:app`
+
+### 3. Variáveis de Ambiente
+```
+PORT=10000
+HOST=0.0.0.0
+DEBUG=false
+WORKERS=2
+TIMEOUT=120
+MAX_REQUESTS=1000
+MAX_REQUESTS_JITTER=100
 ```
 
-### Linux/Mac:
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
+## 📋 Funcionalidades
+
+- **Busca de Clientes**: Busca clientes por CPF na base de dados
+- **Geração de PDF**: Gera declarações de IR em PDF
+- **Download Seguro**: Sistema de download com validação
+- **Health Check**: Monitoramento de saúde da aplicação
+- **Rate Limiting**: Proteção contra spam
+- **Logs Estruturados**: Sistema completo de logging
+
+## 🔧 Tecnologias
+
+- **Backend**: Flask 3.0.3
+- **PDF**: ReportLab 4.2.5
+- **Excel**: OpenPyXL 3.1.5
+- **Servidor**: Gunicorn 23.0.0
+- **CORS**: Flask-CORS 4.0.1
+- **Rate Limiting**: Flask-Limiter 3.8.0
 
 ## 📁 Estrutura do Projeto
 
 ```
-Declaração de IR/
-├── 🐳 DOCKER & DEPLOY
-│   ├── Dockerfile              # Configuração Docker para produção
-│   ├── docker-compose.prod.yml # Orquestração com Nginx
-│   ├── nginx.conf              # Configuração Nginx com SSL
-│   ├── deploy.sh               # Script deploy Linux/Mac
-│   └── deploy.bat              # Script deploy Windows
-│
-├── 🖥️ BACKEND
-│   ├── server.py               # Servidor Flask principal
-│   ├── config.py               # Configurações centralizadas
-│   ├── start.py                # Script de inicialização
-│   └── requirements.txt        # Dependências Python
-│
-├── 🎨 FRONTEND
-│   ├── index.html              # Interface principal
-│   ├── script.js               # Lógica JavaScript
-│   └── styles.css              # Estilos CSS
-│
-├── 📊 DADOS
-│   ├── IR 2024 - NÃO ALTERAR.xlsx  # Base de dados clientes
-│   ├── Scripts/
-│   │   └── gerador_ir_refatorado.py # Lógica de geração PDF
-│   └── Imagens/
-│       ├── Imagem1.png         # Logo brasão
-│       └── Imagem2.png         # Logo Hype
-│
-└── 📖 DOCUMENTAÇÃO
-    ├── README.md               # Este arquivo
-    └── DEPLOY_GUIDE.md         # Guia detalhado de deploy
+├── server.py              # Servidor principal Flask
+├── config.py              # Configurações centralizadas
+├── requirements.txt        # Dependências Python
+├── runtime.txt            # Versão do Python
+├── Procfile               # Configuração para Render
+├── render.yaml            # Configuração alternativa
+├── index.html             # Interface web
+├── styles.css             # Estilos CSS
+├── script.js              # JavaScript frontend
+├── Scripts/
+│   └── gerador_ir_refatorado.py  # Lógica de geração de PDF
+├── Imagens/
+│   ├── Imagem1.png        # Logo brasão
+│   └── Imagem2.png        # Logo Hype
+└── IR 2024 - NÃO ALTERAR.xlsx  # Base de dados
 ```
-
-## ⚡ Início Rápido (Desenvolvimento)
-
-1. **Instalar dependências:**
-```bash
-pip install -r requirements.txt
-```
-
-2. **Iniciar servidor:**
-```bash
-python start.py
-```
-
-3. **Acessar:** http://localhost:5000
-
-## 🔧 Funcionalidades
-
-- ✅ Busca de cliente por CPF
-- ✅ Cálculo automático de valores financeiros
-- ✅ Geração de PDF com layout profissional
-- ✅ Interface web responsiva
-- ✅ Validação de dados
-- ✅ Rate limiting e segurança
-- ✅ Logs estruturados
-- ✅ Health checks
-
-## 🐳 Deploy em Produção
-
-### Opção 1: Docker (Recomendado)
-```bash
-# Windows
-deploy.bat
-
-# Linux/Mac
-./deploy.sh
-```
-
-### Opção 2: Servidor Tradicional
-```bash
-# Instalar dependências
-pip install -r requirements.txt
-
-# Iniciar com Gunicorn
-gunicorn --bind 0.0.0.0:8000 --workers 2 server:app
-```
-
-### Opção 3: Cloud
-- **AWS EC2:** Upload + `./deploy.sh`
-- **Google Cloud Run:** `gcloud run deploy`
-- **Heroku:** `git push heroku main`
 
 ## 🔒 Segurança
 
-- HTTPS obrigatório em produção
-- Rate limiting configurado
+- Validação de CPF
+- Sanitização de inputs
+- Rate limiting
 - Headers de segurança
-- Validação de entradas
+- CORS configurado
 - Logs de auditoria
 
 ## 📊 Monitoramento
 
-### Health Check:
+- Health check endpoint: `/api/health`
+- Logs estruturados com rotação
+- Métricas de performance
+- Tratamento de erros
+
+## 🚀 Endpoints
+
+- `GET /` - Página principal
+- `POST /api/buscar-cliente` - Buscar cliente por CPF
+- `POST /api/gerar-pdf` - Gerar PDF da declaração
+- `GET /api/download-pdf/<filename>` - Download do PDF
+- `GET /api/health` - Health check
+
+## 📝 Logs
+
+Os logs são salvos em:
+- `logs/server.log` - Logs do servidor
+- `logs/gerador_ir.log` - Logs do gerador de PDF
+
+## 🔧 Configuração Local
+
+Para desenvolvimento local:
+
 ```bash
-curl http://localhost/health
+# Instalar dependências
+pip install -r requirements.txt
+
+# Executar servidor
+python server.py
 ```
 
-### Logs:
-```bash
-# Docker
-docker-compose -f docker-compose.prod.yml logs -f
-
-# Tradicional
-tail -f logs/server.log
-```
-
-## 🛠️ Configurações
-
-### Variáveis de Ambiente:
-```bash
-FLASK_ENV=production
-DEBUG=False
-HOST=0.0.0.0
-PORT=8000
-SECRET_KEY=sua-chave-secreta
-```
-
-### Arquivos Configuração:
-- `config.py` - Configurações da aplicação
-- `nginx.conf` - Configurações do proxy reverso
-- `docker-compose.prod.yml` - Orquestração dos serviços
+O servidor estará disponível em `http://localhost:5000`
 
 ## 📞 Suporte
 
-**Hype Empreendimentos e Incorporações SA**
-- 📧 Email: suporte@hype.com.br
-- 📱 Telefone: (11) 9999-9999
+- **Email**: suporte@hype.com.br
+- **Telefone**: (11) 9999-9999
+- **Empresa**: Hype Empreendimentos e Incorporações SA
 
 ## 📄 Licença
 
-Sistema proprietário - Hype Empreendimentos e Incorporações SA
-
----
-
-**Versão:** 1.0.0  
-**Última atualização:** $(date +%Y-%m-%d)
+Sistema proprietário da Hype Empreendimentos.

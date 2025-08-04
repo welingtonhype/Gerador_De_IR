@@ -121,7 +121,7 @@ class BuscadorCliente:
         }
     
     def buscar_por_cpf(self, cpf_busca):
-        """Busca CPF na Base de Clientes e retorna dados do cliente"""
+        """Busca CPF na Base de Clientes e retorna dados do cliente - VERSÃO MELHORADA"""
         is_valid, cpf_clean = ValidadorCPF.validar_cpf(cpf_busca)
         if not is_valid:
             logger.error(f"CPF inválido: {cpf_busca}")
@@ -137,23 +137,34 @@ class BuscadorCliente:
             
             ws = wb['Base de Clientes']
             
+            # BUSCA MELHORADA: múltiplas estratégias
             for row in range(3, ws.max_row + 1):
                 cpf_cell = ws.cell(row=row, column=4).value
                 nome_cliente = ws.cell(row=row, column=3).value
                 
+                # Estratégia 1: CPF exato
                 if cpf_cell:
                     cpf_cell_limpo = ValidadorCPF.limpar_cpf(cpf_cell)
                     if cpf_cell_limpo == cpf_clean:
                         dados = self._extrair_dados_cliente(ws, row)
                         wb.close()
-                        logger.info(f"Cliente encontrado: {dados['cliente']}")
+                        logger.info(f"Cliente encontrado por CPF exato: {dados['cliente']}")
                         return dados
                 
+                # Estratégia 2: CPF parcial (caso tenha formatação diferente)
+                elif cpf_cell and cpf_clean in str(cpf_cell).replace('.', '').replace('-', ''):
+                    dados = self._extrair_dados_cliente(ws, row)
+                    dados['cpf'] = cpf_clean  # Normalizar CPF
+                    wb.close()
+                    logger.info(f"Cliente encontrado por CPF parcial: {dados['cliente']}")
+                    return dados
+                
+                # Estratégia 3: CPF no nome (caso esteja incorreto na planilha)
                 elif nome_cliente and cpf_clean in str(nome_cliente):
                     dados = self._extrair_dados_cliente(ws, row)
                     dados['cpf'] = cpf_clean
                     wb.close()
-                    logger.info(f"Cliente encontrado por nome: {dados['cliente']}")
+                    logger.info(f"Cliente encontrado por CPF no nome: {dados['cliente']}")
                     return dados
             
             wb.close()
@@ -281,21 +292,13 @@ class CalculadorFinanceiro:
                 if not (valor_col_g and isinstance(valor_col_g, (int, float))):
                     continue
                 
-                # NOVA LÓGICA: verificar similaridade de nomes
-                if cliente_col_e and str(cliente_col_e).strip():
-                    nome_planilha = str(cliente_col_e).strip()
-                    
-                    # Primeiro tentar busca exata (original)
-                    if nome_cliente in nome_planilha or nome_planilha in nome_cliente:
-                        total += float(valor_col_g)
-                        registros_encontrados += 1
-                        logger.debug(f"{tipo_busca} encontrado (exato): R$ {valor_col_g:,.2f} para {nome_planilha}")
-                    
-                    # Se não encontrou exato, tentar similaridade
-                    elif self._nomes_sao_similares(nome_cliente, nome_planilha, threshold=0.9):
-                        total += float(valor_col_g)
-                        registros_encontrados += 1
-                        logger.debug(f"{tipo_busca} encontrado (similar): R$ {valor_col_g:,.2f} para {nome_planilha}")
+                # CORREÇÃO: verificar apenas por CPF (mais seguro)
+                cpf_col_f = ws.cell(row=row, column=6).value  # Coluna F - CPF
+                if cpf_col_f and str(cpf_cliente).replace('.', '').replace('-', '') in str(cpf_col_f).replace('.', '').replace('-', ''):
+                    nome_planilha = str(cliente_col_e).strip() if cliente_col_e else "N/A"
+                    total += float(valor_col_g)
+                    registros_encontrados += 1
+                    logger.debug(f"{tipo_busca} encontrado por CPF: R$ {valor_col_g:,.2f} para {nome_planilha} (CPF: {cpf_col_f})")
             
             wb.close()
             logger.info(f"{tipo_busca} total: R$ {total:,.2f} ({registros_encontrados} registros)")
@@ -946,7 +949,7 @@ def _nomes_sao_similares_global(nome1, nome2, threshold=0.9):
     return similaridade >= threshold
 
 def calcular_todos_valores_otimizado(cpf, dados_cliente):
-    """Calcula todos os valores financeiros de uma vez - VERSÃO CORRIGIDA"""
+    """Calcula todos os valores financeiros de uma vez - VERSÃO CORRIGIDA E MELHORADA"""
     try:
         logger.info(f"Iniciando cálculo otimizado para {dados_cliente['cliente']}")
         
@@ -960,14 +963,17 @@ def calcular_todos_valores_otimizado(cpf, dados_cliente):
         saldo_paggo_dunning = 0
         
         nome_cliente = dados_cliente['cliente']
+        cpf_cliente = dados_cliente['cpf']
+        empreendimento_cliente = dados_cliente['empreendimento']
         
-        # 1. Processar UNION-2024 (uma passada só) - COM BUSCA MELHORADA
+        # 1. Processar UNION-2024 (uma passada só) - BUSCA MELHORADA
         if 'UNION - 2024' in wb.sheetnames:
             ws_union = wb['UNION - 2024']
             logger.info("Processando planilha UNION-2024...")
             
             for row in range(2, ws_union.max_row + 1):
                 cliente_col_e = ws_union.cell(row=row, column=5).value  # Nome do cliente
+                cpf_col_f = ws_union.cell(row=row, column=6).value      # CPF (pode estar inconsistente)
                 tipo_col_p = ws_union.cell(row=row, column=16).value    # Tipo
                 valor_col_g = ws_union.cell(row=row, column=7).value    # Valor
                 
@@ -979,36 +985,81 @@ def calcular_todos_valores_otimizado(cpf, dados_cliente):
                 tipo_upper = str(tipo_col_p).upper()
                 valor = float(valor_col_g)
                 
-                # NOVA LÓGICA: busca exata ou similar
-                nome_encontrado = False
-                if nome_cliente in nome_planilha or nome_planilha in nome_cliente:
-                    nome_encontrado = True
-                elif _nomes_sao_similares_global(nome_cliente, nome_planilha, threshold=0.9):
-                    nome_encontrado = True
+                # BUSCA MELHORADA: verificar por nome E por CPF
+                match_encontrado = False
+                match_type = ""
                 
-                if nome_encontrado:
+                # 1. Verificar por nome exato
+                if nome_cliente.strip().upper() == nome_planilha.strip().upper():
+                    match_encontrado = True
+                    match_type = "NOME_EXATO"
+                    logger.debug(f"Match por nome exato: {nome_planilha}")
+                
+                # 2. Verificar por CPF (mesmo que inconsistente)
+                elif cpf_col_f and str(cpf_cliente) in str(cpf_col_f).replace('.', '').replace('-', ''):
+                    match_encontrado = True
+                    match_type = "CPF"
+                    logger.debug(f"Match por CPF: {cpf_col_f}")
+                
+                # 3. Verificar por similaridade de nome (fallback)
+                elif nome_cliente and nome_planilha:
+                    # Verificar se pelo menos 2 palavras principais são iguais
+                    palavras_cliente = [p for p in nome_cliente.strip().upper().split() if len(p) > 2]
+                    palavras_planilha = [p for p in nome_planilha.strip().upper().split() if len(p) > 2]
+                    
+                    palavras_comuns = 0
+                    for palavra_cliente in palavras_cliente:
+                        for palavra_planilha in palavras_planilha:
+                            if palavra_cliente == palavra_planilha:
+                                palavras_comuns += 1
+                                break
+                    
+                    if palavras_comuns >= 2:  # Pelo menos 2 palavras em comum
+                        match_encontrado = True
+                        match_type = "NOME_SIMILAR"
+                        logger.debug(f"Match por nome similar: {nome_planilha} vs {nome_cliente}")
+                
+                if match_encontrado:
                     if "RECEITA BRUTA" in tipo_upper:
                         receita_bruta += valor
                         saldo_union += valor  # Saldo Union = Receita Bruta
-                        logger.debug(f"Receita encontrada: R$ {valor:,.2f} para {nome_planilha}")
+                        logger.debug(f"Receita encontrada ({match_type}): R$ {valor:,.2f} para {nome_planilha}")
                     elif "ATIVO CIRCULANTE" in tipo_upper:
                         despesas_acessorias += valor
-                        logger.debug(f"Despesa encontrada: R$ {valor:,.2f} para {nome_planilha}")
+                        logger.debug(f"Despesa encontrada ({match_type}): R$ {valor:,.2f} para {nome_planilha}")
         
-        # 2. Processar UNIFICADA ERP (uma passada só)
+        # 2. Processar UNIFICADA ERP (uma passada só) - BUSCA MELHORADA
         if 'UNIFICADA ERP (paggo e dunning)' in wb.sheetnames:
             ws_erp = wb['UNIFICADA ERP (paggo e dunning)']
             logger.info("Processando planilha UNIFICADA ERP...")
             
             for row in range(2, ws_erp.max_row + 1):
-                cpf_col_f = ws_erp.cell(row=row, column=6).value  # CPF
                 empreend_col_b = ws_erp.cell(row=row, column=2).value  # Empreendimento
-                valor_col_q = ws_erp.cell(row=row, column=17).value  # Valor
+                cpf_col_f = ws_erp.cell(row=row, column=6).value       # CPF
+                valor_col_q = ws_erp.cell(row=row, column=17).value    # Valor
                 
-                if (cpf_col_f and str(dados_cliente['cpf']) in str(cpf_col_f) and
-                    empreend_col_b and dados_cliente['empreendimento'] in str(empreend_col_b) and
-                    valor_col_q and isinstance(valor_col_q, (int, float))):
+                # Verificar se há dados válidos
+                if not (valor_col_q and isinstance(valor_col_q, (int, float))):
+                    continue
+                
+                # BUSCA MELHORADA: verificar por CPF E empreendimento
+                match_encontrado = False
+                
+                # 1. Verificar por CPF exato
+                if cpf_col_f and str(cpf_cliente) in str(cpf_col_f).replace('.', '').replace('-', ''):
+                    # Se tem empreendimento, verificar também
+                    if empreend_col_b and empreendimento_cliente:
+                        if empreendimento_cliente in str(empreend_col_b):
+                            match_encontrado = True
+                            logger.debug(f"Match ERP por CPF+Empreendimento: CPF={cpf_col_f}, Emp={empreend_col_b}")
+                    else:
+                        # Se não tem empreendimento para comparar, aceitar só por CPF
+                        match_encontrado = True
+                        logger.debug(f"Match ERP por CPF: {cpf_col_f}")
+                
+                if match_encontrado:
                     saldo_paggo_dunning += float(valor_col_q)
+                    logger.debug(f"Saldo ERP encontrado: R$ {valor_col_q:,.2f}")
         
         wb.close()
         

@@ -9,7 +9,7 @@ from pathlib import Path
 # Configurações do Servidor
 SERVER_CONFIG = {
     'HOST': os.environ.get('HOST', '0.0.0.0'),
-    'PORT': int(os.environ.get('PORT', 5000)),
+    'PORT': int(os.environ.get('PORT', 10000)),
     'DEBUG': os.environ.get('DEBUG', 'False').lower() == 'true',
     'THREADED': True
 }
@@ -89,7 +89,9 @@ API_CONFIG = {
         'http://localhost:5000',
         'http://127.0.0.1:5000',
         'http://localhost:3000',
-        'http://127.0.0.1:3000'
+        'http://127.0.0.1:3000',
+        'https://*.render.com',
+        'https://*.onrender.com'
     ]
 }
 
@@ -102,65 +104,48 @@ LOGGING_CONFIG = {
     'BACKUP_COUNT': 5
 }
 
+# Configurações de Cache
+CACHE_CONFIG = {
+    'ENABLED': True,
+    'TTL': 300,  # 5 minutos
+    'MAX_SIZE': 100
+}
+
 # Configurações de Segurança
 SECURITY_CONFIG = {
-    'MAX_FILE_SIZE': 50 * 1024 * 1024,  # 50MB
-    'ALLOWED_EXTENSIONS': ['.xlsx', '.xls'],
     'RATE_LIMIT': {
-        'REQUESTS_PER_MINUTE': 60,
-        'REQUESTS_PER_HOUR': 1000
+        'DEFAULT': "200 per day, 50 per hour",
+        'SEARCH': "10 per minute",
+        'GENERATE_PDF': "5 per minute",
+        'DOWNLOAD': "20 per minute"
+    },
+    'HEADERS': {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';",
+        'Referrer-Policy': 'strict-origin-when-cross-origin'
     }
 }
 
-# Configurações de Interface
-UI_CONFIG = {
-    'THEME': {
-        'PRIMARY_COLOR': '#018672',
-        'SECONDARY_COLOR': '#00a896',
-        'SUCCESS_COLOR': '#28a745',
-        'ERROR_COLOR': '#dc3545',
-        'WARNING_COLOR': '#ffc107',
-        'INFO_COLOR': '#17a2b8',
-        'BACKGROUND_GRADIENT': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-    },
-    'ANIMATIONS': {
-        'ENABLED': True,
-        'DURATION': 300,
-        'EASING': 'ease'
-    },
-    'RESPONSIVE': {
-        'MOBILE_BREAKPOINT': 768,
-        'TABLET_BREAKPOINT': 1024
-    }
-}
-
-# Configurações de Mensagens
-MESSAGES = {
-    'WELCOME': 'Bem-vindo ao Gerador de IR',
-    'WELCOME_SUBTITLE': 'Digite o CPF do cliente para começar',
-    'CLIENT_FOUND': 'Cliente Encontrado',
-    'CLIENT_FOUND_SUBTITLE': 'Dados carregados com sucesso',
-    'CLIENT_NOT_FOUND': 'Cliente não encontrado',
-    'CLIENT_NOT_FOUND_SUBTITLE': 'CPF não encontrado na base de dados',
-    'PDF_GENERATED': 'PDF Gerado',
-    'PDF_GENERATED_SUBTITLE': 'Declaração de IR gerada com sucesso',
-    'ERROR_VALIDATION': 'Erro de Validação',
-    'ERROR_SYSTEM': 'Erro de Sistema',
-    'ERROR_SYSTEM_SUBTITLE': 'Erro ao processar a solicitação',
-    'ERROR_PDF': 'Erro',
-    'ERROR_PDF_SUBTITLE': 'Erro ao gerar o PDF'
+# Configurações de Performance
+PERFORMANCE_CONFIG = {
+    'WORKERS': int(os.environ.get('WORKERS', 2)),
+    'TIMEOUT': int(os.environ.get('TIMEOUT', 120)),
+    'MAX_REQUESTS': int(os.environ.get('MAX_REQUESTS', 1000)),
+    'MAX_REQUESTS_JITTER': int(os.environ.get('MAX_REQUESTS_JITTER', 100))
 }
 
 # Configurações de Teste
 TEST_CONFIG = {
-    'TEST_CPF': '30204690900',
-    'TIMEOUT': 30,
-    'RETRY_ATTEMPTS': 3,
-    'RETRY_DELAY': 1
+    'TEST_CPF': '91446260968',  # CPF de teste conhecido
+    'TEST_NOME': 'Fabio Roberto'  # Nome de teste conhecido
 }
 
+# Configuração principal
 def get_config():
-    """Retorna todas as configurações"""
+    """Retorna configuração principal do sistema"""
     return {
         'SERVER': SERVER_CONFIG,
         'APP': APP_CONFIG,
@@ -169,54 +154,34 @@ def get_config():
         'PDF': PDF_CONFIG,
         'API': API_CONFIG,
         'LOGGING': LOGGING_CONFIG,
+        'CACHE': CACHE_CONFIG,
         'SECURITY': SECURITY_CONFIG,
-        'UI': UI_CONFIG,
-        'MESSAGES': MESSAGES,
+        'PERFORMANCE': PERFORMANCE_CONFIG,
         'TEST': TEST_CONFIG
     }
 
 def validate_config():
     """Valida se todas as configurações estão corretas"""
-    errors = []
-    
-    # Verificar arquivos obrigatórios (apenas os essenciais)
-    essential_files = {
-        'EXCEL_FILE': 'Arquivo Excel da base de dados',
-        'SCRIPT_FILE': 'Script principal do gerador'
-    }
-    
-    for file_key, description in essential_files.items():
-        file_path = FILES_CONFIG[file_key]
-        if not os.path.exists(file_path):
-            errors.append(f"{description} não encontrado: {file_path}")
-    
-    # Verificar configurações do servidor
-    if SERVER_CONFIG['PORT'] < 1 or SERVER_CONFIG['PORT'] > 65535:
-        errors.append("Porta do servidor inválida")
-    
-    # Verificar configurações de API
-    for endpoint in API_CONFIG['ENDPOINTS'].values():
-        if not endpoint.startswith('/'):
-            errors.append(f"Endpoint inválido: {endpoint}")
-    
-    return errors
-
-if __name__ == "__main__":
-    # Testar configurações
-    print("🔧 Validando configurações...")
-    errors = validate_config()
-    
-    if errors:
-        print("❌ Erros encontrados:")
-        for error in errors:
-            print(f"   - {error}")
-    else:
-        print("✅ Todas as configurações estão corretas")
-    
-    # Mostrar configurações
     config = get_config()
-    print(f"\n📋 Configurações do Sistema:")
-    print(f"   Nome: {config['APP']['NAME']}")
-    print(f"   Versão: {config['APP']['VERSION']}")
-    print(f"   Servidor: {config['SERVER']['HOST']}:{config['SERVER']['PORT']}")
-    print(f"   Debug: {config['SERVER']['DEBUG']}") 
+    
+    # Validar arquivos essenciais
+    required_files = [
+        config['FILES']['EXCEL_FILE'],
+        config['FILES']['SCRIPT_FILE'],
+        config['FILES']['LOGO_HYPE'],
+        config['FILES']['LOGO_BRASAO']
+    ]
+    
+    missing_files = []
+    for file_path in required_files:
+        if not os.path.exists(file_path):
+            missing_files.append(file_path)
+    
+    if missing_files:
+        raise FileNotFoundError(f"Arquivos essenciais não encontrados: {missing_files}")
+    
+    # Validar configurações do servidor
+    if config['SERVER']['PORT'] < 1 or config['SERVER']['PORT'] > 65535:
+        raise ValueError("Porta inválida")
+    
+    return True 

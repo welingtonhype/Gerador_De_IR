@@ -50,3 +50,16 @@ desktop.ini
 # Temporary files
 temp/
 tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Render specific
+.render-buildlogs/

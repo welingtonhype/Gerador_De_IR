@@ -612,35 +612,24 @@ def handle_exception(error):
     }), 500
 
 if __name__ == '__main__':
-    # Validar configurações
-    print("🔧 Validando configurações...")
-    errors = validate_config()
-    
-    if errors:
-        print("❌ Erros encontrados:")
-        for error in errors:
-            print(f"   - {error}")
-        sys.exit(1)
-    
-    print("✅ Configurações validadas com sucesso")
-    print("🚀 Iniciando servidor do Gerador de IR")
-    print("=" * 50)
-    print("📋 Endpoints disponíveis:")
-    print("   GET  /                    - Página principal")
-    print("   POST /api/buscar-cliente  - Buscar cliente por CPF")
-    print("   POST /api/gerar-pdf       - Gerar PDF da declaração")
-    print("   GET  /api/download-pdf/<filename> - Download do PDF")
-    print("   GET  /api/health          - Health check")
-    print("=" * 50)
-    
-    # Configurações do servidor
-    host = config['SERVER']['HOST']
-    port = config['SERVER']['PORT']
-    debug = config['SERVER']['DEBUG']
-    
-    app.run(
-        host=host,
-        port=port,
-        debug=debug,
-        threaded=config['SERVER']['THREADED']
-    ) 
+    try:
+        # Validar configurações
+        print("🔧 Validando configurações...")
+        validate_config()
+        print("✅ Configurações validadas com sucesso")
+        
+        # Configurações do servidor
+        host = config['SERVER']['HOST']
+        port = config['SERVER']['PORT']
+        debug = config['SERVER']['DEBUG']
+        
+        print(f"🚀 Iniciando servidor em {host}:{port}")
+        app.run(
+            host=host,
+            port=port,
+            debug=debug,
+            threaded=config['SERVER']['THREADED']
+        )
+    except Exception as e:
+        print(f"❌ Erro ao iniciar servidor: {str(e)}")
+        sys.exit(1) 
