@@ -85,7 +85,7 @@ async function handleGenerate() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ cpf: cpfClean }),
-            signal: AbortSignal.timeout(120000) // 2 minutos de timeout para produção
+            signal: AbortSignal.timeout(180000) // 3 minutos de timeout para produção
         });
         
         let result;
@@ -232,8 +232,22 @@ async function handleGenerate() {
             ]
         };
         
+        // Se for um erro de timeout específico
+        if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
+            errorMessage = 'Tempo limite excedido';
+            errorDetails = {
+                tipo: 'TIMEOUT',
+                descricao: 'A requisição demorou muito para responder',
+                detalhes: [
+                    'O servidor pode estar sobrecarregado',
+                    'A geração do PDF pode estar demorando',
+                    'Tente novamente em alguns instantes',
+                    'Se o problema persistir, aguarde alguns minutos'
+                ]
+            };
+        }
         // Se for um erro de rede específico
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        else if (error.name === 'TypeError' && error.message.includes('fetch')) {
             errorMessage = 'Servidor não disponível';
             errorDetails.descricao = 'O servidor não está respondendo';
             errorDetails.detalhes = [

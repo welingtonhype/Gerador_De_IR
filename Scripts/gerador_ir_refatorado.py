@@ -971,7 +971,9 @@ def calcular_todos_valores_otimizado(cpf, dados_cliente):
             ws_union = wb['UNION - 2024']
             logger.info("Processando planilha UNION-2024...")
             
-            for row in range(2, ws_union.max_row + 1):
+            # Otimização: limitar busca a 1000 linhas para performance
+            max_rows = min(ws_union.max_row, 1000)
+            for row in range(2, max_rows + 1):
                 cliente_col_e = ws_union.cell(row=row, column=5).value  # Nome do cliente
                 cpf_col_f = ws_union.cell(row=row, column=6).value      # CPF (pode estar inconsistente)
                 tipo_col_p = ws_union.cell(row=row, column=16).value    # Tipo
@@ -1033,7 +1035,9 @@ def calcular_todos_valores_otimizado(cpf, dados_cliente):
             ws_erp = wb['UNIFICADA ERP (paggo e dunning)']
             logger.info("Processando planilha UNIFICADA ERP...")
             
-            for row in range(2, ws_erp.max_row + 1):
+            # Otimização: limitar busca a 1000 linhas para performance
+            max_rows = min(ws_erp.max_row, 1000)
+            for row in range(2, max_rows + 1):
                 empreend_col_b = ws_erp.cell(row=row, column=2).value  # Empreendimento
                 cpf_col_f = ws_erp.cell(row=row, column=6).value       # CPF
                 valor_col_q = ws_erp.cell(row=row, column=17).value    # Valor
