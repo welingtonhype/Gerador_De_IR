@@ -1,1 +1,2 @@
-web: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 300 --max-requests 100 --max-requests-jitter 10 server:app 
+web: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 300 --max-requests 100 --max-requests-jitter 10 --worker-class sync --preload server:app
+worker: celery -A celery_app worker --loglevel=info --concurrency=2 

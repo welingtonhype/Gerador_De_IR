@@ -6,13 +6,10 @@ import os
 import sys
 import json
 import re
-import hashlib
-import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
-from werkzeug.exceptions import BadRequest, NotFound, InternalServerError
-from werkzeug.utils import secure_filename
 import traceback
+import redis
 
 # Adicionar o diretório Scripts ao path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'Scripts'))
@@ -20,21 +17,28 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'Scripts'))
 # Importar configurações
 from config import get_config, validate_config
 
-# Importar o módulo do gerador de IR
-from gerador_ir_refatorado import buscar_cliente_por_cpf, calcular_valores_financeiros_manual, gerar_pdf_declaracao
+# Importar Celery
+from celery_app import celery_app
+from tasks import processar_cliente_async
 
 # Configurações
 config = get_config()
 
+# Configurar Redis
+redis_client = redis.Redis(
+    host=config['REDIS']['HOST'],
+    port=config['REDIS']['PORT'],
+    password=config['REDIS']['PASSWORD'],
+    db=config['REDIS']['DB'],
+    decode_responses=True
+)
+
 # Cache simples em memória para otimizar buscas
-dados_cache = {}  # Cache para dados completos (cliente + financeiros)
+dados_cache = {}
 
-# Configuração de logging com rotação
-from logging.handlers import RotatingFileHandler
-
-# Configurar logging
+# Configuração de logging
 def setup_logging():
-    """Configura logging com rotação de arquivos"""
+    """Configura logging"""
     log_format = config['LOGGING']['FORMAT']
     log_level = getattr(logging, config['LOGGING']['LEVEL'])
     
@@ -43,12 +47,8 @@ def setup_logging():
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     
-    # Handler para arquivo com rotação
-    file_handler = RotatingFileHandler(
-        os.path.join(log_dir, 'server.log'),
-        maxBytes=config['LOGGING']['MAX_BYTES'],
-        backupCount=config['LOGGING']['BACKUP_COUNT']
-    )
+    # Handler para arquivo
+    file_handler = logging.FileHandler(os.path.join(log_dir, 'server.log'))
     file_handler.setFormatter(logging.Formatter(log_format))
     
     # Handler para console
@@ -68,7 +68,7 @@ logger = setup_logging()
 # Inicializar Flask
 app = Flask(__name__)
 
-# Configurar CORS com origens específicas
+# Configurar CORS
 CORS(app, origins=config['API']['CORS_ORIGINS'])
 
 # Configurar rate limiting
@@ -221,7 +221,7 @@ def buscar_cliente():
                 'message': message
             }), 400
         
-                # Sanitizar e validar CPF
+        # Sanitizar e validar CPF
         cpf_raw = sanitize_input(data.get('cpf', ''))
         is_valid_cpf, cpf_clean = validate_cpf(cpf_raw)
         
@@ -233,26 +233,31 @@ def buscar_cliente():
 
         logger.info(f"Buscando cliente com CPF: {cpf_clean}")
         
-        # Verificar cache primeiro
+        # Verificar cache Redis primeiro
+        cache_key = f"cliente:{cpf_clean}"
+        cached_data = redis_client.get(cache_key)
+        
+        if cached_data:
+            logger.info(f"Dados encontrados no cache Redis para CPF: {cpf_clean}")
+            return jsonify(json.loads(cached_data))
+        
+        # Verificar cache local
         if cpf_clean in dados_cache:
-            logger.info(f"Dados encontrados no cache para CPF: {cpf_clean}")
+            logger.info(f"Dados encontrados no cache local para CPF: {cpf_clean}")
             cached_data = dados_cache[cpf_clean]
             
-            return jsonify({
-                'success': True,
-                'data': cached_data['cliente'],
-                'tem_dados_financeiros': cached_data['tem_dados_financeiros'],
-                'registros_encontrados': cached_data['registros_encontrados'],
-                'receita_total': cached_data['receita_total'],
-                'despesas_total': cached_data['despesas_total'],
-                'fontes_dados': cached_data['fontes_dados'],
-                'erro_consistencia': cached_data['erro_consistencia'],
-                'pode_gerar_pdf': cached_data['pode_gerar_pdf'],
-                'total_valores': cached_data['total_valores'],
-                'from_cache': True
-            })
+            # Salvar no Redis também
+            redis_client.setex(
+                cache_key,
+                config['REDIS']['TTL'],
+                json.dumps(cached_data, default=str)
+            )
+            
+            return jsonify(cached_data)
 
         # Buscar dados do cliente
+        from gerador_ir_refatorado import buscar_cliente_por_cpf, calcular_valores_financeiros_manual
+        
         dados_cliente = buscar_cliente_por_cpf(cpf_clean)
         
         if not dados_cliente:
@@ -280,24 +285,8 @@ def buscar_cliente():
         logger.info(f"Registros encontrados na UNION: {valores_calculados['registros_encontrados']}")
         logger.info(f"Receita: R$ {receita_total:,.2f}, Despesas: R$ {despesas_total:,.2f}")
         
-        # Salvar no cache para futuras consultas
-        dados_cache[cpf_clean] = {
-            'cliente': response_data,
-            'tem_dados_financeiros': tem_dados_financeiros,
-            'registros_encontrados': valores_calculados['registros_encontrados'],
-            'receita_total': receita_total,
-            'despesas_total': despesas_total,
-            'fontes_dados': valores_calculados.get('fontes_dados', []),
-            'erro_consistencia': valores_calculados.get('erro_consistencia'),
-            'pode_gerar_pdf': valores_calculados.get('pode_gerar_pdf', True),
-            'total_valores': valores_calculados.get('total_valores', 0),
-            'valores_calculados': valores_calculados,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        logger.info(f"Dados salvos no cache para CPF: {cpf_clean}")
-
-        return jsonify({
+        # Preparar resposta
+        final_response = {
             'success': True,
             'data': response_data,
             'tem_dados_financeiros': tem_dados_financeiros,
@@ -309,7 +298,19 @@ def buscar_cliente():
             'pode_gerar_pdf': valores_calculados.get('pode_gerar_pdf', True),
             'total_valores': valores_calculados.get('total_valores', 0),
             'from_cache': False
-        })
+        }
+        
+        # Salvar no cache local e Redis
+        dados_cache[cpf_clean] = final_response
+        redis_client.setex(
+            cache_key,
+            config['REDIS']['TTL'],
+            json.dumps(final_response, default=str)
+        )
+        
+        logger.info(f"Dados salvos no cache para CPF: {cpf_clean}")
+
+        return jsonify(final_response)
         
     except Exception as e:
         logger.error(f"Erro ao buscar cliente: {str(e)}")
@@ -322,10 +323,8 @@ def buscar_cliente():
 @app.route('/api/buscar-e-gerar-pdf', methods=['POST'])
 @limiter.limit("3 per minute")
 def buscar_e_gerar_pdf():
-    """API para buscar cliente e gerar PDF em uma única operação"""
+    """API para buscar cliente e gerar PDF em uma única operação (ASSÍNCRONO)"""
     logger.info(f"Recebida requisição para buscar-e-gerar-pdf")
-    logger.info(f"Headers: {dict(request.headers)}")
-    logger.info(f"Content-Type: {request.content_type}")
     
     try:
         # Validar dados de entrada
@@ -356,79 +355,90 @@ def buscar_e_gerar_pdf():
                 'message': cpf_clean
             }), 400
 
-        logger.info(f"Buscando cliente e gerando PDF para CPF: {cpf_clean}")
+        logger.info(f"Iniciando processamento assíncrono para CPF: {cpf_clean}")
         
-        # Buscar dados do cliente (usar cache se disponível)
-        logger.info(f"Verificando cache para CPF: {cpf_clean}")
-        if cpf_clean in dados_cache:
-            logger.info(f"Usando dados do cache: {cpf_clean}")
-            cached_data = dados_cache[cpf_clean]
-            dados_cliente = cached_data['cliente']
-            valores_calculados = cached_data['valores_calculados']
-        else:
-            # Buscar e calcular tudo
-            logger.info(f"Buscando cliente no banco de dados: {cpf_clean}")
-            dados_cliente = buscar_cliente_por_cpf(cpf_clean)
-            
-            if not dados_cliente:
-                logger.warning(f"Cliente não encontrado para CPF: {cpf_clean}")
-                return jsonify({
-                    'success': False,
-                    'message': 'Cliente não encontrado na base de dados'
-                }), 404
-            
-            logger.info(f"Cliente encontrado: {dados_cliente['cliente']}")
-            logger.info(f"Calculando valores financeiros...")
-            valores_calculados = calcular_valores_financeiros_manual(cpf_clean, dados_cliente)
+        # Verificar se já existe resultado no Redis
+        cache_key = f"resultado:{cpf_clean}"
+        cached_result = redis_client.get(cache_key)
         
-        # Gerar PDF
-        nome_pdf = gerar_pdf_declaracao(cpf_clean, dados_cliente, valores_calculados)
+        if cached_result:
+            logger.info(f"Resultado encontrado no cache para CPF: {cpf_clean}")
+            result_data = json.loads(cached_result)
+            return jsonify(result_data)
         
-        if not nome_pdf:
-            logger.error(f"Erro ao gerar PDF para CPF: {cpf_clean}")
-            return jsonify({
-                'success': False,
-                'message': 'Erro ao gerar PDF'
-            }), 500
+        # Iniciar task assíncrona
+        task = processar_cliente_async.delay(cpf_clean)
         
-        logger.info(f"PDF gerado com sucesso: {nome_pdf}")
+        logger.info(f"Task iniciada com ID: {task.id}")
         
         return jsonify({
             'success': True,
-            'message': 'Cliente encontrado e PDF gerado com sucesso',
-            'filename': nome_pdf,
-            'cliente': dados_cliente,
-            'valores': {
-                'receita_total': valores_calculados.get('receita_bruta', 0),
-                'despesas_total': valores_calculados.get('despesas_acessorias', 0),
-                'registros_encontrados': valores_calculados.get('registros_encontrados', 0)
-            }
+            'message': 'Processamento iniciado',
+            'task_id': task.id,
+            'status': 'PROCESSING',
+            'poll_url': f'/api/task-status/{task.id}'
         })
         
     except Exception as e:
-        logger.error(f"Erro ao buscar e gerar PDF: {str(e)}")
+        logger.error(f"Erro ao iniciar processamento: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         
-        # Retornar erro mais específico para debug
-        error_details = {
+        return jsonify({
             'success': False,
             'message': 'Erro interno do servidor',
             'error_type': type(e).__name__,
-            'error_message': str(e),
             'timestamp': datetime.now().isoformat()
-        }
+        }), 500
+
+@app.route('/api/task-status/<task_id>')
+def task_status(task_id):
+    """Verificar status de uma task assíncrona"""
+    try:
+        task = celery_app.AsyncResult(task_id)
         
-        # Log adicional para debug
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(f"Error message: {str(e)}")
-        logger.error(f"Error args: {e.args if hasattr(e, 'args') else 'N/A'}")
+        if task.state == 'PENDING':
+            response = {
+                'success': True,
+                'state': task.state,
+                'status': 'Aguardando processamento...',
+                'progress': 0
+            }
+        elif task.state == 'PROGRESS':
+            response = {
+                'success': True,
+                'state': task.state,
+                'status': task.info.get('status', 'Processando...'),
+                'progress': task.info.get('progress', 0)
+            }
+        elif task.state == 'SUCCESS':
+            response = {
+                'success': True,
+                'state': task.state,
+                'result': task.result,
+                'status': 'Concluído'
+            }
+        else:
+            response = {
+                'success': False,
+                'state': task.state,
+                'message': str(task.info),
+                'status': 'Erro no processamento'
+            }
         
-        return jsonify(error_details), 500
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Erro ao verificar status da task: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Erro ao verificar status',
+            'error': str(e)
+        }), 500
 
 @app.route('/api/gerar-pdf', methods=['POST'])
 @limiter.limit("5 per minute")
 def gerar_pdf():
-    """API para gerar PDF da declaração de IR"""
+    """API para gerar PDF da declaração de IR (ASSÍNCRONO)"""
     try:
         # Validar dados de entrada
         if not request.is_json:
@@ -457,44 +467,26 @@ def gerar_pdf():
                 'message': cpf_clean
             }), 400
         
-        logger.info(f"Gerando PDF para CPF: {cpf_clean}")
+        logger.info(f"Iniciando geração de PDF para CPF: {cpf_clean}")
         
-        # Tentar usar dados do cache primeiro
-        if cpf_clean in dados_cache:
-            logger.info(f"Usando dados do cache para gerar PDF: {cpf_clean}")
-            cached_data = dados_cache[cpf_clean]
-            dados_cliente = cached_data['cliente']
-            valores_calculados = cached_data['valores_calculados']
-        else:
-            # Buscar dados do cliente se não estiver no cache
-            dados_cliente = buscar_cliente_por_cpf(cpf_clean)
-            
-            if not dados_cliente:
-                logger.warning(f"Cliente não encontrado para CPF: {cpf_clean}")
-                return jsonify({
-                    'success': False,
-                    'message': 'Cliente não encontrado na base de dados'
-                }), 404
-            
-            # Calcular valores financeiros
-            valores_calculados = calcular_valores_financeiros_manual(cpf_clean, dados_cliente)
+        # Verificar cache primeiro
+        cache_key = f"resultado:{cpf_clean}"
+        cached_result = redis_client.get(cache_key)
         
-        # Gerar PDF
-        nome_pdf = gerar_pdf_declaracao(cpf_clean, dados_cliente, valores_calculados)
+        if cached_result:
+            logger.info(f"PDF já gerado e em cache para CPF: {cpf_clean}")
+            result_data = json.loads(cached_result)
+            return jsonify(result_data)
         
-        if not nome_pdf:
-            logger.error(f"Erro ao gerar PDF para CPF: {cpf_clean}")
-            return jsonify({
-                'success': False,
-                'message': 'Erro ao gerar PDF'
-            }), 500
-        
-        logger.info(f"PDF gerado com sucesso: {nome_pdf}")
+        # Iniciar task assíncrona
+        task = processar_cliente_async.delay(cpf_clean)
         
         return jsonify({
             'success': True,
-            'message': 'PDF gerado com sucesso',
-            'filename': nome_pdf
+            'message': 'Geração de PDF iniciada',
+            'task_id': task.id,
+            'status': 'PROCESSING',
+            'poll_url': f'/api/task-status/{task.id}'
         })
         
     except Exception as e:
@@ -567,13 +559,21 @@ def health_check():
             if not os.path.exists(file_path):
                 missing_files.append(file_path)
         
-        status = 'healthy' if not missing_files else 'degraded'
+        # Verificar Redis
+        redis_status = 'healthy'
+        try:
+            redis_client.ping()
+        except Exception as e:
+            redis_status = f'unhealthy: {str(e)}'
+        
+        status = 'healthy' if not missing_files and redis_status == 'healthy' else 'degraded'
         
         return jsonify({
             'status': status,
             'timestamp': datetime.now().isoformat(),
             'version': config['APP']['VERSION'],
             'missing_files': missing_files if missing_files else None,
+            'redis_status': redis_status,
             'environment': 'production' if not config['SERVER']['DEBUG'] else 'development'
         })
     except Exception as e:
@@ -602,53 +602,6 @@ def simple_test():
         'success': True,
         'message': 'Teste simples funcionando'
     })
-
-@app.route('/api/test-pdf', methods=['POST'])
-def test_pdf_generation():
-    """Teste específico para geração de PDF"""
-    try:
-        logger.info("Teste de geração de PDF iniciado")
-        
-        # Verificar se os módulos estão disponíveis
-        try:
-            from Scripts.gerador_ir_refatorado import buscar_cliente_por_cpf
-            logger.info("✅ Módulo gerador_ir_refatorado importado com sucesso")
-        except Exception as e:
-            logger.error(f"❌ Erro ao importar módulo: {str(e)}")
-            return jsonify({
-                'success': False,
-                'message': f'Erro ao importar módulo: {str(e)}'
-            }), 500
-        
-        # Testar busca de cliente
-        try:
-            dados_cliente = buscar_cliente_por_cpf('43445950091')
-            if dados_cliente:
-                logger.info(f"✅ Cliente encontrado: {dados_cliente['cliente']}")
-                return jsonify({
-                    'success': True,
-                    'message': 'Teste de busca de cliente passou',
-                    'cliente': dados_cliente['cliente']
-                })
-            else:
-                logger.warning("⚠️ Cliente não encontrado no teste")
-                return jsonify({
-                    'success': False,
-                    'message': 'Cliente não encontrado no teste'
-                }), 404
-        except Exception as e:
-            logger.error(f"❌ Erro na busca de cliente: {str(e)}")
-            return jsonify({
-                'success': False,
-                'message': f'Erro na busca de cliente: {str(e)}'
-            }), 500
-            
-    except Exception as e:
-        logger.error(f"❌ Erro geral no teste: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Erro geral: {str(e)}'
-        }), 500
 
 # Handlers de erro
 @app.errorhandler(400)
@@ -684,7 +637,6 @@ def internal_error(error):
     logger.error(f"Erro interno: {str(error)}")
     logger.error(f"Traceback: {traceback.format_exc()}")
     
-    # Retornar JSON mesmo em caso de erro
     return jsonify({
         'success': False,
         'message': 'Erro interno do servidor',

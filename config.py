@@ -4,7 +4,6 @@ Centraliza todas as configurações do sistema
 """
 
 import os
-from pathlib import Path
 
 # Configurações do Servidor
 SERVER_CONFIG = {
@@ -14,10 +13,34 @@ SERVER_CONFIG = {
     'THREADED': True
 }
 
+# Configurações Redis
+REDIS_CONFIG = {
+    'HOST': os.environ.get('REDIS_HOST', 'localhost'),
+    'PORT': int(os.environ.get('REDIS_PORT', 6379)),
+    'PASSWORD': os.environ.get('REDIS_PASSWORD', None),
+    'DB': int(os.environ.get('REDIS_DB', 0)),
+    'TTL': 3600,  # 1 hora
+    'ENABLED': True
+}
+
+# Configurações Celery
+CELERY_CONFIG = {
+    'BROKER_URL': os.environ.get('REDIS_URL', 'redis://localhost:6379/0'),
+    'RESULT_BACKEND': os.environ.get('REDIS_URL', 'redis://localhost:6379/0'),
+    'TASK_SERIALIZER': 'json',
+    'ACCEPT_CONTENT': ['json'],
+    'RESULT_SERIALIZER': 'json',
+    'TIMEZONE': 'America/Sao_Paulo',
+    'ENABLE_UTC': True,
+    'TASK_TRACK_STARTED': True,
+    'TASK_TIME_LIMIT': 300,  # 5 minutos
+    'WORKER_MAX_TASKS_PER_CHILD': 50
+}
+
 # Configurações da Aplicação
 APP_CONFIG = {
     'NAME': 'Gerador de IR - Hype Empreendimentos',
-    'VERSION': '1.0.0',
+    'VERSION': '2.0.0',
     'DESCRIPTION': 'Sistema para geração de declarações de IR',
     'COMPANY': 'Hype Empreendimentos e Incorporações SA',
     'SUPPORT_EMAIL': 'suporte@hype.com.br',
@@ -29,9 +52,7 @@ FILES_CONFIG = {
     'EXCEL_FILE': 'IR 2024 - NÃO ALTERAR.xlsx',
     'SCRIPT_FILE': 'Scripts/gerador_ir_refatorado.py',
     'LOGO_HYPE': 'Imagens/Imagem2.png',
-    'LOGO_BRASAO': 'Imagens/Imagem1.png',
-    'LOG_FILE': 'server.log',
-    'IR_LOG_FILE': 'gerador_ir.log'
+    'LOGO_BRASAO': 'Imagens/Imagem1.png'
 }
 
 # Configurações de Validação
@@ -78,12 +99,14 @@ API_CONFIG = {
         'HEALTH': '/api/health',
         'SEARCH_CLIENT': '/api/buscar-cliente',
         'GENERATE_PDF': '/api/gerar-pdf',
-        'DOWNLOAD_PDF': '/api/download-pdf/<filename>'
+        'DOWNLOAD_PDF': '/api/download-pdf/<filename>',
+        'TASK_STATUS': '/api/task-status/<task_id>'
     },
     'TIMEOUTS': {
         'SEARCH': 10,
         'GENERATE_PDF': 30,
-        'DOWNLOAD': 60
+        'DOWNLOAD': 60,
+        'ASYNC_TASK': 300
     },
     'CORS_ORIGINS': [
         'http://localhost:5000',
@@ -92,7 +115,7 @@ API_CONFIG = {
         'http://127.0.0.1:3000',
         'http://localhost:10000',
         'http://127.0.0.1:10000',
-        'https://*.render.com',
+        'https://*.railway.app',
         'https://*.onrender.com',
         '*'
     ]
@@ -110,8 +133,9 @@ LOGGING_CONFIG = {
 # Configurações de Cache
 CACHE_CONFIG = {
     'ENABLED': True,
-    'TTL': 300,  # 5 minutos
-    'MAX_SIZE': 100
+    'TTL': 3600,  # 1 hora
+    'MAX_SIZE': 100,
+    'REDIS_ENABLED': True
 }
 
 # Configurações de Segurança
@@ -134,16 +158,12 @@ SECURITY_CONFIG = {
 
 # Configurações de Performance
 PERFORMANCE_CONFIG = {
-    'WORKERS': int(os.environ.get('WORKERS', 1)),
+    'WORKERS': int(os.environ.get('WORKERS', 2)),
     'TIMEOUT': int(os.environ.get('TIMEOUT', 300)),
     'MAX_REQUESTS': int(os.environ.get('MAX_REQUESTS', 100)),
-    'MAX_REQUESTS_JITTER': int(os.environ.get('MAX_REQUESTS_JITTER', 10))
-}
-
-# Configurações de Teste
-TEST_CONFIG = {
-    'TEST_CPF': '91446260968',  # CPF de teste conhecido
-    'TEST_NOME': 'Fabio Roberto'  # Nome de teste conhecido
+    'MAX_REQUESTS_JITTER': int(os.environ.get('MAX_REQUESTS_JITTER', 10)),
+    'EXCEL_CHUNK_SIZE': 100,  # Processar Excel em chunks
+    'ASYNC_ENABLED': True
 }
 
 # Configuração principal
@@ -151,6 +171,8 @@ def get_config():
     """Retorna configuração principal do sistema"""
     return {
         'SERVER': SERVER_CONFIG,
+        'REDIS': REDIS_CONFIG,
+        'CELERY': CELERY_CONFIG,
         'APP': APP_CONFIG,
         'FILES': FILES_CONFIG,
         'VALIDATION': VALIDATION_CONFIG,
@@ -159,8 +181,7 @@ def get_config():
         'LOGGING': LOGGING_CONFIG,
         'CACHE': CACHE_CONFIG,
         'SECURITY': SECURITY_CONFIG,
-        'PERFORMANCE': PERFORMANCE_CONFIG,
-        'TEST': TEST_CONFIG
+        'PERFORMANCE': PERFORMANCE_CONFIG
     }
 
 def validate_config():

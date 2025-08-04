@@ -2,12 +2,12 @@
 
 Sistema web para geração automática de declarações de Imposto de Renda para clientes da Hype Empreendimentos.
 
-## 🚀 Deploy no Render
+## 🚀 Deploy no Railway
 
-Este projeto está otimizado para deploy no Render. Para fazer o deploy:
+Este projeto está otimizado para deploy no Railway. Para fazer o deploy:
 
-### 1. Conectar ao Render
-- Acesse [render.com](https://render.com)
+### 1. Conectar ao Railway
+- Acesse [railway.app](https://railway.app)
 - Conecte seu repositório GitHub
 - Selecione este repositório
 
@@ -15,7 +15,7 @@ Este projeto está otimizado para deploy no Render. Para fazer o deploy:
 - **Tipo**: Web Service
 - **Runtime**: Python 3.9
 - **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --max-requests 1000 --max-requests-jitter 100 server:app`
+- **Start Command**: `gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 300 --max-requests 100 --max-requests-jitter 10 --worker-class sync --preload server:app`
 
 ### 3. Variáveis de Ambiente
 ```
@@ -23,9 +23,9 @@ PORT=10000
 HOST=0.0.0.0
 DEBUG=false
 WORKERS=2
-TIMEOUT=120
-MAX_REQUESTS=1000
-MAX_REQUESTS_JITTER=100
+TIMEOUT=300
+MAX_REQUESTS=100
+MAX_REQUESTS_JITTER=10
 ```
 
 ## 📋 Funcionalidades
@@ -39,22 +39,25 @@ MAX_REQUESTS_JITTER=100
 
 ## 🔧 Tecnologias
 
-- **Backend**: Flask 3.0.3
-- **PDF**: ReportLab 4.2.5
-- **Excel**: OpenPyXL 3.1.5
-- **Servidor**: Gunicorn 23.0.0
-- **CORS**: Flask-CORS 4.0.1
-- **Rate Limiting**: Flask-Limiter 3.8.0
+- **Backend**: Flask 2.3.3
+- **PDF**: ReportLab 4.0.4
+- **Excel**: OpenPyXL 3.1.2
+- **Servidor**: Gunicorn 21.2.0
+- **CORS**: Flask-CORS 4.0.0
+- **Rate Limiting**: Flask-Limiter 3.5.0
+- **Redis**: redis 5.0.1
+- **Celery**: celery 5.3.4
 
 ## 📁 Estrutura do Projeto
 
 ```
 ├── server.py              # Servidor principal Flask
+├── celery_app.py          # Configuração Celery
+├── tasks.py               # Tasks assíncronas
 ├── config.py              # Configurações centralizadas
 ├── requirements.txt        # Dependências Python
-├── runtime.txt            # Versão do Python
-├── Procfile               # Configuração para Render
-├── render.yaml            # Configuração alternativa
+├── railway.json           # Configuração Railway
+├── Procfile               # Comandos de produção
 ├── index.html             # Interface web
 ├── styles.css             # Estilos CSS
 ├── script.js              # JavaScript frontend
@@ -78,7 +81,7 @@ MAX_REQUESTS_JITTER=100
 ## 📊 Monitoramento
 
 - Health check endpoint: `/api/health`
-- Logs estruturados com rotação
+- Logs estruturados
 - Métricas de performance
 - Tratamento de erros
 
@@ -94,7 +97,6 @@ MAX_REQUESTS_JITTER=100
 
 Os logs são salvos em:
 - `logs/server.log` - Logs do servidor
-- `logs/gerador_ir.log` - Logs do gerador de PDF
 
 ## 🔧 Configuração Local
 

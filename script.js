@@ -16,6 +16,8 @@ const elements = {
 
 // Estado da aplicação
 let isLoading = false;
+let currentTaskId = null;
+let pollingInterval = null;
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', function() {
@@ -85,7 +87,7 @@ async function handleGenerate() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ cpf: cpfClean }),
-            signal: AbortSignal.timeout(180000) // 3 minutos de timeout para produção
+            signal: AbortSignal.timeout(30000) // 30 segundos para iniciar task
         });
         
         let result;
@@ -97,72 +99,83 @@ async function handleGenerate() {
             console.log('Response status:', response.status);
             console.log('Response text:', responseText);
             
-                         // Tentar parsear como JSON
-             try {
-                 // Se a resposta estiver vazia, tratar como erro de servidor
-                 if (!responseText || responseText.trim() === '') {
-                     console.error('Response vazia - Status:', response.status);
-                     
-                     if (response.status === 502) {
-                         displayError({
-                             message: 'Servidor temporariamente indisponível',
-                             details: {
-                                 tipo: 'BAD_GATEWAY',
-                                 descricao: 'O servidor está temporariamente indisponível',
-                                 detalhes: [
-                                     'O servidor pode estar reiniciando',
-                                     'Tente novamente em alguns instantes',
-                                     'Se o problema persistir, aguarde alguns minutos'
-                                 ]
-                             }
-                         });
-                     } else {
-                         displayError({
-                             message: 'Erro interno do servidor',
-                             details: {
-                                 tipo: 'ERRO_SERVIDOR',
-                                 descricao: 'O servidor retornou uma resposta vazia',
-                                 detalhes: [
-                                     'O servidor pode estar temporariamente indisponível',
-                                     'Tente novamente em alguns instantes',
-                                     'Se o problema persistir, entre em contato com o suporte'
-                                 ]
-                             }
-                         });
-                     }
-                     return;
-                 }
-                 
-                 result = JSON.parse(responseText);
-             } catch (parseError) {
-                 console.error('Erro ao parsear JSON:', parseError);
-                 console.error('Response text:', responseText);
-                 
-                 // Se não conseguir parsear JSON, provavelmente é um erro HTML
-                 displayError({
-                     message: 'Erro interno do servidor',
-                     details: {
-                         tipo: 'ERRO_SERVIDOR',
-                         descricao: 'O servidor retornou uma resposta inválida',
-                         detalhes: [
-                             'O servidor pode estar temporariamente indisponível',
-                             'Tente novamente em alguns instantes',
-                             'Se o problema persistir, entre em contato com o suporte'
-                         ]
-                     }
-                 });
-                 return;
-             }
+            // Tentar parsear como JSON
+            try {
+                if (!responseText || responseText.trim() === '') {
+                    console.error('Response vazia - Status:', response.status);
+                    if (response.status === 502) {
+                        displayError({
+                            message: 'Servidor temporariamente indisponível',
+                            details: {
+                                tipo: 'BAD_GATEWAY',
+                                descricao: 'O servidor está sobrecarregado',
+                                detalhes: [
+                                    'Tente novamente em alguns instantes',
+                                    'O sistema pode estar processando outras requisições',
+                                    'Se o problema persistir, aguarde alguns minutos'
+                                ]
+                            }
+                        });
+                    } else {
+                        displayError({
+                            message: 'Resposta vazia do servidor',
+                            details: {
+                                tipo: 'EMPTY_RESPONSE',
+                                descricao: 'O servidor não retornou dados',
+                                detalhes: [
+                                    'Verifique sua conexão com a internet',
+                                    'Tente novamente em alguns instantes',
+                                    'Se o problema persistir, contate o suporte'
+                                ]
+                            }
+                        });
+                    }
+                    return;
+                }
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('Erro ao parsear JSON:', parseError);
+                console.error('Response text:', responseText);
+                
+                if (responseText.includes('<html>')) {
+                    displayError({
+                        message: 'Erro interno do servidor',
+                        details: {
+                            tipo: 'HTML_RESPONSE',
+                            descricao: 'O servidor retornou uma página de erro',
+                            detalhes: [
+                                'O servidor pode estar sobrecarregado',
+                                'Tente novamente em alguns instantes',
+                                'Se o problema persistir, aguarde alguns minutos'
+                            ]
+                        }
+                    });
+                } else {
+                    displayError({
+                        message: 'Erro de comunicação com o servidor',
+                        details: {
+                            tipo: 'PARSE_ERROR',
+                            descricao: 'Não foi possível interpretar a resposta do servidor',
+                            detalhes: [
+                                'Verifique sua conexão com a internet',
+                                'Tente novamente em alguns instantes',
+                                'Se o problema persistir, contate o suporte'
+                            ]
+                        }
+                    });
+                }
+                return;
+            }
         } catch (error) {
             console.error('Erro ao ler response:', error);
             displayError({
                 message: 'Erro de conexão',
                 details: {
-                    tipo: 'ERRO_CONEXAO',
-                    descricao: 'Não foi possível ler a resposta do servidor',
+                    tipo: 'FETCH_ERROR',
+                    descricao: 'Não foi possível conectar com o servidor',
                     detalhes: [
                         'Verifique sua conexão com a internet',
-                        'O servidor pode estar temporariamente indisponível',
+                        'Certifique-se de que o servidor está funcionando',
                         'Tente novamente em alguns instantes'
                     ]
                 }
@@ -170,60 +183,36 @@ async function handleGenerate() {
             return;
         }
         
-        if (response.ok && result.success) {
-            // Download do PDF
-            if (result.filename) {
-                const downloadUrl = `${API_BASE}/download-pdf/${result.filename}`;
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = result.filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }
-            
-            // Mostrar sucesso
-            displaySuccess(result);
-            
-        } else {
-            // Mostrar erro
-            if (response.status === 404) {
-                displayError({
-                    message: 'Cliente não encontrado',
-                    details: {
-                        tipo: 'CLIENTE_NAO_ENCONTRADO',
-                        descricao: 'O CPF informado não foi encontrado na base de dados',
-                        detalhes: [
-                            'Verifique se o CPF está correto',
-                            'Certifique-se de que o cliente está cadastrado no sistema'
-                        ]
-                    }
-                });
-            } else if (response.status === 500) {
-                displayError({
-                    message: 'Erro interno do servidor',
-                    details: {
-                        tipo: 'ERRO_SERVIDOR',
-                        descricao: 'Ocorreu um erro interno no servidor',
-                        detalhes: [
-                            'O servidor pode estar temporariamente indisponível',
-                            'Tente novamente em alguns instantes',
-                            'Se o problema persistir, entre em contato com o suporte'
-                        ]
-                    }
-                });
+        if (response.status === 200 && result.success) {
+            if (result.status === 'PROCESSING' && result.task_id) {
+                // Processamento assíncrono iniciado
+                currentTaskId = result.task_id;
+                startPolling(result.task_id);
             } else {
-                displayError(result);
+                // Resultado imediato (cache)
+                displaySuccess(result);
             }
+        } else {
+            displayError({
+                message: result.message || 'Erro desconhecido',
+                details: result.details || {
+                    tipo: 'API_ERROR',
+                    descricao: 'Erro retornado pela API',
+                    detalhes: [
+                        'Verifique os dados informados',
+                        'Tente novamente em alguns instantes',
+                        'Se o problema persistir, contate o suporte'
+                    ]
+                }
+            });
         }
         
     } catch (error) {
         console.error('Erro na requisição:', error);
         
-        // Determinar o tipo de erro específico
         let errorMessage = 'Erro de conexão';
         let errorDetails = {
-            tipo: 'ERRO_CONEXAO',
+            tipo: 'NETWORK_ERROR',
             descricao: 'Não foi possível conectar com o servidor',
             detalhes: [
                 'Verifique sua conexão com a internet',
@@ -232,7 +221,6 @@ async function handleGenerate() {
             ]
         };
         
-        // Se for um erro de timeout específico
         if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
             errorMessage = 'Tempo limite excedido';
             errorDetails = {
@@ -245,178 +233,291 @@ async function handleGenerate() {
                     'Se o problema persistir, aguarde alguns minutos'
                 ]
             };
-        }
-        // Se for um erro de rede específico
-        else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-            errorMessage = 'Servidor não disponível';
-            errorDetails.descricao = 'O servidor não está respondendo';
-            errorDetails.detalhes = [
-                'O servidor pode estar temporariamente indisponível',
-                'Verifique se a URL está correta',
-                'Tente novamente em alguns instantes'
-            ];
+        } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            errorMessage = 'Erro de conexão';
+            errorDetails = {
+                tipo: 'FETCH_ERROR',
+                descricao: 'Não foi possível conectar com o servidor',
+                detalhes: [
+                    'Verifique sua conexão com a internet',
+                    'Certifique-se de que o servidor está funcionando',
+                    'Tente novamente em alguns instantes'
+                ]
+            };
         }
         
         displayError({
             message: errorMessage,
             details: errorDetails
         });
+    } finally {
+        setLoading(false);
+    }
+}
+
+async function startPolling(taskId) {
+    console.log(`Iniciando polling para task: ${taskId}`);
+    
+    // Limpar polling anterior se existir
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
     }
     
-    setLoading(false);
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutos (5s * 60)
+    
+    pollingInterval = setInterval(async () => {
+        attempts++;
+        
+        try {
+            const response = await fetch(`${API_BASE}/task-status/${taskId}`);
+            const result = await response.json();
+            
+            console.log(`Polling attempt ${attempts}:`, result);
+            
+            if (result.success) {
+                if (result.state === 'SUCCESS') {
+                    // Task concluída com sucesso
+                    clearInterval(pollingInterval);
+                    displaySuccess(result.result);
+                } else if (result.state === 'FAILURE') {
+                    // Task falhou
+                    clearInterval(pollingInterval);
+                    displayError({
+                        message: result.message || 'Erro no processamento',
+                        details: {
+                            tipo: 'TASK_FAILURE',
+                            descricao: 'O processamento falhou',
+                            detalhes: [
+                                'Verifique os dados informados',
+                                'Tente novamente em alguns instantes',
+                                'Se o problema persistir, contate o suporte'
+                            ]
+                        }
+                    });
+                } else if (result.state === 'PROGRESS') {
+                    // Atualizar progresso na UI
+                    updateProgress(result.status, result.progress);
+                }
+                // PENDING - continuar polling
+            } else {
+                // Erro na verificação do status
+                clearInterval(pollingInterval);
+                displayError({
+                    message: result.message || 'Erro ao verificar status',
+                    details: {
+                        tipo: 'STATUS_ERROR',
+                        descricao: 'Não foi possível verificar o progresso',
+                        detalhes: [
+                            'Tente novamente em alguns instantes',
+                            'Se o problema persistir, contate o suporte'
+                        ]
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Erro no polling:', error);
+            
+            if (attempts >= maxAttempts) {
+                clearInterval(pollingInterval);
+                displayError({
+                    message: 'Tempo limite excedido',
+                    details: {
+                        tipo: 'POLLING_TIMEOUT',
+                        descricao: 'O processamento demorou muito',
+                        detalhes: [
+                            'O servidor pode estar sobrecarregado',
+                            'Tente novamente em alguns instantes',
+                            'Se o problema persistir, aguarde alguns minutos'
+                        ]
+                    }
+                });
+            }
+        }
+    }, 5000); // Polling a cada 5 segundos
+}
+
+function updateProgress(status, progress) {
+    // Atualizar mensagem de progresso na UI
+    const loadingSection = document.getElementById('loadingSection');
+    if (loadingSection) {
+        const progressElement = loadingSection.querySelector('.progress-message');
+        if (progressElement) {
+            progressElement.textContent = status || 'Processando...';
+        }
+        
+        const progressBar = loadingSection.querySelector('.progress-bar');
+        if (progressBar) {
+            progressBar.style.width = `${progress || 0}%`;
+        }
+    }
 }
 
 function validateCpf(cpf) {
-    if (!cpf) return false;
-    
+    // Remover caracteres não numéricos
     const cpfClean = cpf.replace(/\D/g, '');
     
-    if (cpfClean.length !== 11) return false;
-    
-    // Verificar se todos os dígitos são iguais
-    if (/^(\d)\1{10}$/.test(cpfClean)) return false;
-    
-    // Validar dígitos verificadores
-    let sum = 0;
-    for (let i = 0; i < 9; i++) {
-        sum += parseInt(cpfClean[i]) * (10 - i);
+    // Validar formato
+    if (cpfClean.length !== 11) {
+        displayError({
+            message: 'CPF inválido',
+            details: {
+                tipo: 'VALIDATION_ERROR',
+                descricao: 'O CPF deve ter 11 dígitos',
+                detalhes: [
+                    'Digite apenas os números do CPF',
+                    'Exemplo: 123.456.789-00',
+                    'Verifique se não há espaços ou caracteres especiais'
+                ]
+            }
+        });
+        return false;
     }
-    let digit1 = (sum * 10) % 11;
-    if (digit1 === 10) digit1 = 0;
     
-    if (digit1 !== parseInt(cpfClean[9])) return false;
-    
-    sum = 0;
-    for (let i = 0; i < 10; i++) {
-        sum += parseInt(cpfClean[i]) * (11 - i);
+    // Validar se todos os dígitos são iguais
+    if (/^(\d)\1{10}$/.test(cpfClean)) {
+        displayError({
+            message: 'CPF inválido',
+            details: {
+                tipo: 'VALIDATION_ERROR',
+                descricao: 'CPF com todos os dígitos iguais é inválido',
+                detalhes: [
+                    'Digite um CPF válido',
+                    'Verifique se não há erro de digitação',
+                    'Exemplo: 123.456.789-00'
+                ]
+            }
+        });
+        return false;
     }
-    let digit2 = (sum * 10) % 11;
-    if (digit2 === 10) digit2 = 0;
     
-    return digit2 === parseInt(cpfClean[10]);
+    return true;
 }
 
 function displaySuccess(result) {
-    let html = '';
+    console.log('Sucesso:', result);
     
-    if (result.cliente) {
-        html += `
-            <p><strong>Cliente:</strong> ${result.cliente.cliente}</p>
-            <p><strong>CPF:</strong> ${formatCpf(result.cliente.cpf)}</p>
-        `;
+    if (elements.successSection) {
+        elements.successSection.style.display = 'block';
+    }
+    
+    if (elements.clientInfo) {
+        let html = '';
         
-        if (result.cliente.empreendimento) {
-            html += `<p><strong>Empreendimento:</strong> ${result.cliente.empreendimento}</p>`;
+        if (result.cliente) {
+            html += `<h3>Cliente Encontrado</h3>`;
+            html += `<p><strong>Nome:</strong> ${result.cliente.cliente || 'N/A'}</p>`;
+            html += `<p><strong>CPF:</strong> ${formatCpf(result.cliente.cpf || '')}</p>`;
         }
-    }
-    
-    if (result.valores) {
-        html += `
-            <p><strong>Receita Total:</strong> R$ ${formatCurrency(result.valores.receita_total)}</p>
-            <p><strong>Despesas:</strong> R$ ${formatCurrency(result.valores.despesas_total)}</p>
-        `;
         
-        if (result.valores.registros_encontrados) {
-            html += `<p><strong>Registros:</strong> ${result.valores.registros_encontrados}</p>`;
+        if (result.valores) {
+            html += `<h3>Valores Calculados</h3>`;
+            html += `<p><strong>Receita Total:</strong> ${formatCurrency(result.valores.receita_total || 0)}</p>`;
+            html += `<p><strong>Despesas Total:</strong> ${formatCurrency(result.valores.despesas_total || 0)}</p>`;
+            html += `<p><strong>Registros Encontrados:</strong> ${result.valores.registros_encontrados || 0}</p>`;
         }
+        
+        if (result.filename) {
+            html += `<h3>PDF Gerado</h3>`;
+            html += `<p><strong>Arquivo:</strong> ${result.filename}</p>`;
+            html += `<a href="/api/download-pdf/${result.filename}" class="btn btn-primary" download>Download PDF</a>`;
+        }
+        
+        elements.clientInfo.innerHTML = html;
     }
     
-    if (result.filename) {
-        html += `<p><strong>Arquivo:</strong> ${result.filename}</p>`;
-    }
-    
-    elements.clientInfo.innerHTML = html;
     showSection('successSection');
 }
 
 function displayError(error) {
-    let html = '<h4>Detalhes do Erro</h4>';
+    console.error('Erro:', error);
     
-    if (error.message) {
-        html += `<p><strong>Mensagem:</strong> ${error.message}</p>`;
+    if (elements.errorSection) {
+        elements.errorSection.style.display = 'block';
     }
     
-    // Tratar diferentes tipos de erro
-    if (error.erro_consistencia) {
-        const erro = error.erro_consistencia;
-        html += `<p><strong>Tipo:</strong> ${erro.tipo}</p>`;
-        html += `<p><strong>Descrição:</strong> ${erro.descricao}</p>`;
+    if (elements.errorDetails) {
+        let html = `<h3>${error.message}</h3>`;
         
-        if (erro.tipo === 'SEM_DADOS_FINANCEIROS') {
-            if (erro.detalhes && erro.detalhes.length > 0) {
-                html += '<p><strong>Detalhes:</strong></p><ul>';
-                erro.detalhes.forEach(detalhe => {
+        if (error.details) {
+            html += `<p><strong>Tipo:</strong> ${error.details.tipo}</p>`;
+            html += `<p><strong>Descrição:</strong> ${error.details.descricao}</p>`;
+            
+            if (error.details.detalhes && error.details.detalhes.length > 0) {
+                html += `<h4>Soluções:</h4><ul>`;
+                error.details.detalhes.forEach(detalhe => {
                     html += `<li>${detalhe}</li>`;
                 });
-                html += '</ul>';
+                html += `</ul>`;
             }
-        } else if (erro.tipo === 'DIFERENCA_SALDOS') {
-            html += `<p><strong>Diferença:</strong> R$ ${formatCurrency(erro.diferenca)}</p>`;
-            html += `<p><strong>Saldo Union:</strong> R$ ${formatCurrency(erro.saldo_union)}</p>`;
-            html += `<p><strong>Saldo Paggo:</strong> R$ ${formatCurrency(erro.saldo_paggo)}</p>`;
         }
-    } else if (error.details) {
-        const details = error.details;
-        if (details.descricao) {
-            html += `<p><strong>Descrição:</strong> ${details.descricao}</p>`;
-        }
-        if (details.detalhes && details.detalhes.length > 0) {
-            html += '<p><strong>Soluções:</strong></p><ul>';
-            details.detalhes.forEach(detalhe => {
-                html += `<li>${detalhe}</li>`;
-            });
-            html += '</ul>';
-        }
+        
+        elements.errorDetails.innerHTML = html;
     }
     
-    elements.errorDetails.innerHTML = html;
     showSection('errorSection');
 }
 
 function setLoading(loading) {
     isLoading = loading;
-    elements.generateBtn.disabled = loading;
+    
+    if (elements.generateBtn) {
+        elements.generateBtn.disabled = loading;
+        elements.generateBtn.textContent = loading ? 'Processando...' : 'Gerar PDF';
+    }
     
     if (loading) {
-        elements.generateBtn.innerHTML = `
-            <div class="spinner" style="width: 20px; height: 20px; margin: 0;"></div>
-            <span>Processando...</span>
-        `;
-    } else {
-        elements.generateBtn.innerHTML = `
-            <i class="fas fa-file-pdf"></i>
-            <span>Gerar Declaração</span>
-        `;
+        // Limpar polling anterior
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        currentTaskId = null;
     }
 }
 
 function showSection(sectionId) {
-    ['loadingSection', 'successSection', 'errorSection'].forEach(id => {
-        if (elements[id]) {
-            elements[id].classList.add('hidden');
+    // Esconder todas as seções
+    const sections = ['loadingSection', 'successSection', 'errorSection'];
+    sections.forEach(section => {
+        const element = document.getElementById(section);
+        if (element) {
+            element.style.display = 'none';
         }
     });
     
-    if (elements[sectionId]) {
-        elements[sectionId].classList.remove('hidden');
+    // Mostrar a seção especificada
+    const targetSection = document.getElementById(sectionId);
+    if (targetSection) {
+        targetSection.style.display = 'block';
     }
 }
 
 function resetForm() {
-    elements.cpfInput.value = '';
+    // Limpar polling
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+    currentTaskId = null;
+    
+    // Resetar formulário
+    if (elements.cpfInput) {
+        elements.cpfInput.value = '';
         elements.cpfInput.focus();
-    showSection('');
+    }
+    
+    // Esconder todas as seções
+    showSection('loadingSection');
+    
     setLoading(false);
 }
 
-
-
 function formatCurrency(value) {
-    if (!value || isNaN(value)) return '0,00';
-    return parseFloat(value).toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    }).format(value || 0);
 }
 
 function formatCpf(cpf) {
