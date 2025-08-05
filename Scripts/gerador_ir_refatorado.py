@@ -681,7 +681,7 @@ class GeradorIR:
     
     def __init__(self):
         from config import FILES_CONFIG
-        self.config = config
+        self.config = FILES_CONFIG
         self.arquivo_excel = FILES_CONFIG['EXCEL_FILE']
         self.buscador = BuscadorCliente(self.arquivo_excel)
         self.calculador = CalculadorFinanceiro(self.arquivo_excel)
@@ -752,7 +752,8 @@ def main():
                         print(f"❌ Erro: {resultado}")
             
             elif opcao == "2":
-                cpf_teste = config['TEST']['TEST_CPF']
+                from config import FILES_CONFIG
+                cpf_teste = FILES_CONFIG['TEST']['TEST_CPF']
                 print(f"Testando com CPF: {cpf_teste}")
                 sucesso, resultado = gerador.gerar_declaracao(cpf_teste)
                 if sucesso:

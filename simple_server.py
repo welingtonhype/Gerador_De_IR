@@ -13,9 +13,15 @@ import re
 import logging
 from datetime import datetime
 from pathlib import Path
-import sys
-sys.path.append('Scripts')
-from gerador_ir_refatorado import GeradorIR
+# Import do gerador de PDF (opcional para funcionalidade básica)
+try:
+    import sys
+    sys.path.append('Scripts')
+    from gerador_ir_refatorado import GeradorIR
+    PDF_GENERATOR_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Gerador de PDF não disponível: {e}")
+    PDF_GENERATOR_AVAILABLE = False
 
 # Configurar logging
 logging.basicConfig(
@@ -300,27 +306,40 @@ def gerar_pdf():
         logger.info(f"Gerando PDF para CPF: {cpf_clean}")
         
         # Gerar PDF
-        gerador = GeradorIR()
-        sucesso, resultado = gerador.gerar_declaracao(cpf_clean)
+        if not PDF_GENERATOR_AVAILABLE:
+            return jsonify({
+                'success': False,
+                'message': 'Gerador de PDF não disponível no momento'
+            }), 503
         
-        if sucesso:
-            pdf_path = resultado
-            if pdf_path and os.path.exists(pdf_path):
-                return send_file(
-                    pdf_path,
-                    as_attachment=True,
-                    download_name=f"Declaracao_IR_{cpf_clean}.pdf",
-                    mimetype='application/pdf'
-                )
+        try:
+            gerador = GeradorIR()
+            sucesso, resultado = gerador.gerar_declaracao(cpf_clean)
+            
+            if sucesso:
+                pdf_path = resultado
+                if pdf_path and os.path.exists(pdf_path):
+                    return send_file(
+                        pdf_path,
+                        as_attachment=True,
+                        download_name=f"Declaracao_IR_{cpf_clean}.pdf",
+                        mimetype='application/pdf'
+                    )
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': 'PDF gerado mas arquivo não encontrado'
+                    }), 500
             else:
                 return jsonify({
                     'success': False,
-                    'message': 'PDF gerado mas arquivo não encontrado'
+                    'message': resultado
                 }), 500
-        else:
+        except Exception as e:
+            logger.error(f"Erro ao gerar PDF: {str(e)}")
             return jsonify({
                 'success': False,
-                'message': resultado
+                'message': f'Erro ao gerar PDF: {str(e)}'
             }), 500
         
     except Exception as e:

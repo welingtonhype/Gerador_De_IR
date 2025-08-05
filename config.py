@@ -18,6 +18,9 @@ TEST_CONFIG = {
     'TEST_NOME': 'Fabio Roberto'
 }
 
+# Adicionar TEST ao FILES_CONFIG para compatibilidade
+FILES_CONFIG['TEST'] = TEST_CONFIG
+
 # Configurações do sistema
 SYSTEM_CONFIG = {
     'DEBUG': True,
