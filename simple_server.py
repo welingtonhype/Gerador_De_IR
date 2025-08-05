@@ -26,8 +26,9 @@ try:
     sys.path.append('Scripts')
     from gerador_ir_refatorado import GeradorIR
     PDF_GENERATOR_AVAILABLE = True
+    logger.info("✅ Gerador de PDF importado com sucesso")
 except ImportError as e:
-    logger.warning(f"Gerador de PDF não disponível: {e}")
+    logger.warning(f"❌ Gerador de PDF não disponível: {e}")
     PDF_GENERATOR_AVAILABLE = False
 
 # Inicializar Flask
@@ -118,6 +119,7 @@ class ExcelProcessor:
         """Calcula valores financeiros"""
         try:
             wb = self._load_workbook()
+            logger.info(f"Planilhas disponíveis: {wb.sheetnames}")
             
             valores = {
                 'receita_bruta': 0.0,
@@ -129,14 +131,22 @@ class ExcelProcessor:
             # Calcular valores da planilha UNION
             if 'UNION - 2024' in wb.sheetnames:
                 ws_union = wb['UNION - 2024']
+                logger.info(f"Planilha UNION encontrada, linhas: {ws_union.max_row}")
                 valores['receita_bruta'] = self._sum_by_criteria(ws_union, cpf, "RECEITA BRUTA")
                 valores['despesas_acessorias'] = self._sum_by_criteria(ws_union, cpf, "ATIVO CIRCULANTE")
                 valores['saldo_union'] = valores['receita_bruta']
+                logger.info(f"Receita bruta calculada: {valores['receita_bruta']}")
+                logger.info(f"Despesas acessórias calculadas: {valores['despesas_acessorias']}")
+            else:
+                logger.warning("Planilha 'UNION - 2024' não encontrada")
             
             # Calcular valores da planilha ERP
             if 'UNIFICADA ERP (paggo e dunning)' in wb.sheetnames:
                 ws_erp = wb['UNIFICADA ERP (paggo e dunning)']
                 valores['saldo_paggo_dunning'] = self._sum_erp_values(ws_erp, cpf)
+                logger.info(f"Saldo ERP calculado: {valores['saldo_paggo_dunning']}")
+            else:
+                logger.warning("Planilha 'UNIFICADA ERP (paggo e dunning)' não encontrada")
             
             logger.info(f"Valores calculados para CPF {cpf}: {valores}")
             return valores
@@ -148,6 +158,9 @@ class ExcelProcessor:
     def _sum_by_criteria(self, ws, cpf, tipo):
         """Soma valores por critérios"""
         total = 0.0
+        matches = 0
+        
+        logger.info(f"Buscando CPF {cpf} com tipo '{tipo}' em {ws.max_row} linhas")
         
         for row in range(2, ws.max_row + 1):
             cpf_col = ws.cell(row=row, column=5).value  # Coluna E
@@ -158,7 +171,10 @@ class ExcelProcessor:
                 tipo_col and tipo in str(tipo_col) and
                 valor_col and isinstance(valor_col, (int, float))):
                 total += float(valor_col)
+                matches += 1
+                logger.info(f"Match encontrado na linha {row}: CPF={cpf_col}, Tipo={tipo_col}, Valor={valor_col}")
         
+        logger.info(f"Total encontrado para {tipo}: {total} (matches: {matches})")
         return total
     
     def _sum_erp_values(self, ws, cpf):
@@ -306,19 +322,27 @@ def gerar_pdf():
         logger.info(f"Gerando PDF para CPF: {cpf_clean}")
         
         # Gerar PDF
+        logger.info(f"PDF_GENERATOR_AVAILABLE: {PDF_GENERATOR_AVAILABLE}")
+        
         if not PDF_GENERATOR_AVAILABLE:
+            logger.error("Gerador de PDF não disponível")
             return jsonify({
                 'success': False,
                 'message': 'Gerador de PDF não disponível no momento'
             }), 503
         
         try:
+            logger.info("Criando instância do GeradorIR...")
             gerador = GeradorIR()
+            logger.info("Chamando gerar_declaracao...")
             sucesso, resultado = gerador.gerar_declaracao(cpf_clean)
+            logger.info(f"Resultado da geração: sucesso={sucesso}, resultado={resultado}")
             
             if sucesso:
                 pdf_path = resultado
+                logger.info(f"Verificando se arquivo existe: {pdf_path}")
                 if pdf_path and os.path.exists(pdf_path):
+                    logger.info(f"PDF encontrado, enviando arquivo: {pdf_path}")
                     return send_file(
                         pdf_path,
                         as_attachment=True,
@@ -326,17 +350,21 @@ def gerar_pdf():
                         mimetype='application/pdf'
                     )
                 else:
+                    logger.error(f"PDF gerado mas arquivo não encontrado: {pdf_path}")
                     return jsonify({
                         'success': False,
                         'message': 'PDF gerado mas arquivo não encontrado'
                     }), 500
             else:
+                logger.error(f"Erro na geração do PDF: {resultado}")
                 return jsonify({
                     'success': False,
                     'message': resultado
                 }), 500
         except Exception as e:
             logger.error(f"Erro ao gerar PDF: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return jsonify({
                 'success': False,
                 'message': f'Erro ao gerar PDF: {str(e)}'
