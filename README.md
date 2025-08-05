@@ -1,123 +1,65 @@
-# Gerador de IR - Hype Empreendimentos
+# Gerador de Declaração de IR
 
-Sistema web para geração automática de declarações de Imposto de Renda para clientes da Hype Empreendimentos.
+Sistema web para geração de declarações de Imposto de Renda baseado em dados de planilha Excel.
 
-## 🚀 Deploy no Railway
+## Funcionalidades
 
-Este projeto está otimizado para deploy no Railway. Para fazer o deploy:
+- Busca de clientes por CPF
+- Cálculo automático de receita bruta e despesas acessórias
+- Geração de PDF com declaração de IR
+- Interface web responsiva
 
-### 1. Conectar ao Railway
-- Acesse [railway.app](https://railway.app)
-- Conecte seu repositório GitHub
-- Selecione este repositório
+## Tecnologias
 
-### 2. Configurar o Serviço
-- **Tipo**: Web Service
-- **Runtime**: Python 3.9
-- **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 300 --max-requests 100 --max-requests-jitter 10 --worker-class sync --preload server:app`
+- **Backend**: Python/Flask
+- **Frontend**: HTML/CSS/JavaScript
+- **PDF**: ReportLab
+- **Excel**: OpenPyXL
+- **Deploy**: Railway
 
-### 3. Variáveis de Ambiente
-```
-PORT=10000
-HOST=0.0.0.0
-DEBUG=false
-WORKERS=2
-TIMEOUT=300
-MAX_REQUESTS=100
-MAX_REQUESTS_JITTER=10
-```
-
-## 📋 Funcionalidades
-
-- **Busca de Clientes**: Busca clientes por CPF na base de dados
-- **Geração de PDF**: Gera declarações de IR em PDF
-- **Download Seguro**: Sistema de download com validação
-- **Health Check**: Monitoramento de saúde da aplicação
-- **Rate Limiting**: Proteção contra spam
-- **Logs Estruturados**: Sistema completo de logging
-
-## 🔧 Tecnologias
-
-- **Backend**: Flask 2.3.3
-- **PDF**: ReportLab 4.0.4
-- **Excel**: OpenPyXL 3.1.2
-- **Servidor**: Gunicorn 21.2.0
-- **CORS**: Flask-CORS 4.0.0
-- **Rate Limiting**: Flask-Limiter 3.5.0
-- **Redis**: redis 5.0.1
-- **Celery**: celery 5.3.4
-
-## 📁 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
-├── server.py              # Servidor principal Flask
-├── celery_app.py          # Configuração Celery
-├── tasks.py               # Tasks assíncronas
-├── config.py              # Configurações centralizadas
-├── requirements.txt        # Dependências Python
-├── railway.json           # Configuração Railway
-├── Procfile               # Comandos de produção
-├── index.html             # Interface web
-├── styles.css             # Estilos CSS
-├── script.js              # JavaScript frontend
+├── simple_server.py      # Servidor Flask principal
 ├── Scripts/
-│   └── gerador_ir_refatorado.py  # Lógica de geração de PDF
-├── Imagens/
-│   ├── Imagem1.png        # Logo brasão
-│   └── Imagem2.png        # Logo Hype
-└── IR 2024 - NÃO ALTERAR.xlsx  # Base de dados
+│   └── gerador_ir_refatorado.py  # Gerador de PDF
+├── index.html           # Interface web
+├── styles.css           # Estilos CSS
+├── script.js            # JavaScript frontend
+├── requirements.txt     # Dependências Python
+├── railway.json         # Configuração Railway
+└── IR 2024 - NÃO ALTERAR.xlsx  # Planilha de dados
 ```
 
-## 🔒 Segurança
+## Deploy
 
-- Validação de CPF
-- Sanitização de inputs
-- Rate limiting
-- Headers de segurança
-- CORS configurado
-- Logs de auditoria
+O projeto está configurado para deploy no Railway:
 
-## 📊 Monitoramento
+1. **Railway.json**: Configuração do serviço web
+2. **Requirements.txt**: Dependências Python
+3. **Simple_server.py**: Servidor Flask principal
 
-- Health check endpoint: `/api/health`
-- Logs estruturados
-- Métricas de performance
-- Tratamento de erros
+## Uso
 
-## 🚀 Endpoints
+1. Acesse a interface web
+2. Digite o CPF do cliente
+3. O sistema busca os dados na planilha
+4. Calcula receita bruta e despesas acessórias
+5. Gera PDF com a declaração
 
-- `GET /` - Página principal
-- `POST /api/buscar-cliente` - Buscar cliente por CPF
-- `POST /api/gerar-pdf` - Gerar PDF da declaração
-- `GET /api/download-pdf/<filename>` - Download do PDF
-- `GET /api/health` - Health check
+## Planilha de Dados
 
-## 📝 Logs
+A planilha Excel deve conter:
+- **Base de Clientes**: Dados dos clientes (CPF, nome, empreendimento, etc.)
+- **UNION - 2024**: Dados financeiros para cálculos
 
-Os logs são salvos em:
-- `logs/server.log` - Logs do servidor
+## Desenvolvimento
 
-## 🔧 Configuração Local
-
-Para desenvolvimento local:
+Para rodar localmente:
 
 ```bash
-# Instalar dependências
 pip install -r requirements.txt
-
-# Executar servidor
-python server.py
+python simple_server.py
 ```
 
-O servidor estará disponível em `http://localhost:5000`
-
-## 📞 Suporte
-
-- **Email**: suporte@hype.com.br
-- **Telefone**: (11) 9999-9999
-- **Empresa**: Hype Empreendimentos e Incorporações SA
-
-## 📄 Licença
-
-Sistema proprietário da Hype Empreendimentos.
+Acesse: http://localhost:10000 

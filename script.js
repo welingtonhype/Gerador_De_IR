@@ -87,7 +87,7 @@ async function handleGenerate() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ cpf: cpfClean }),
-            signal: AbortSignal.timeout(30000) // 30 segundos para iniciar task
+            signal: AbortSignal.timeout(120000) // 2 minutos de timeout
         });
         
         let result;
@@ -264,7 +264,7 @@ async function startPolling(taskId) {
     }
     
     let attempts = 0;
-    const maxAttempts = 60; // 5 minutos (5s * 60)
+    const maxAttempts = 120; // 10 minutos (5s * 120)
     
     pollingInterval = setInterval(async () => {
         attempts++;

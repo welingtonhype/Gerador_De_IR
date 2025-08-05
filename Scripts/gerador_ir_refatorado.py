@@ -1,5 +1,6 @@
 """
-Gerador de IR Refatorado - Versão 3.0
+Gerador de IR Refatorado - Versão Simplificada
+Implementa exatamente as fórmulas Excel fornecidas
 """
 
 import openpyxl
@@ -77,51 +78,16 @@ class ValidadorCPF:
             return False, "CPF inválido"
 
 class BuscadorCliente:
-    """Classe para busca de dados do cliente"""
+    """Classe para busca de dados do cliente - IMPLEMENTA FÓRMULAS EXCEL"""
     
     def __init__(self, arquivo_excel):
         self.arquivo_excel = arquivo_excel
     
-    def _converter_valor(self, valor):
-        """Converte valor para float, tratando casos especiais"""
-        if valor is None:
-            return 0.0
-        if isinstance(valor, (int, float)):
-            return float(valor)
-        if isinstance(valor, str):
-            valor_str = valor.strip().upper()
-            if valor_str in ['VERIFICAR', 'N/A', 'N/A.', '']:
-                return 0.0
-            try:
-                return float(valor_str)
-            except ValueError:
-                return 0.0
-        return 0.0
-    
-    def _extrair_dados_cliente(self, ws, row):
-        """Extrai dados do cliente da planilha"""
-        return {
-            'cpf': str(ws.cell(row=row, column=4).value or ''),
-            'cliente': str(ws.cell(row=row, column=3).value or ''),
-            'empreendimento': str(ws.cell(row=row, column=5).value or ''),
-            'unidade': str(ws.cell(row=row, column=7).value or ''),
-            'sigla': str(ws.cell(row=row, column=6).value or ''),
-            'endereco': str(ws.cell(row=row, column=10).value or ''),
-            'numero': str(ws.cell(row=row, column=11).value or ''),
-            'bairro': str(ws.cell(row=row, column=12).value or ''),
-            'estado': str(ws.cell(row=row, column=13).value or ''),
-            'cidade': str(ws.cell(row=row, column=14).value or ''),
-            'codigo': str(ws.cell(row=row, column=15).value or ''),
-            'nome_empresa': str(ws.cell(row=row, column=9).value or 'HYPE EMPREENDIMENTOS'),
-            'cnpj_empresa': str(ws.cell(row=row, column=8).value or '41.081.989/0001-92'),
-            'valor_venda': self._converter_valor(ws.cell(row=row, column=16).value),
-            'saldo_union': self._converter_valor(ws.cell(row=row, column=17).value),
-            'saldo_erp': self._converter_valor(ws.cell(row=row, column=18).value),
-            'diferenca': self._converter_valor(ws.cell(row=row, column=19).value)
-        }
-    
     def buscar_por_cpf(self, cpf_busca):
-        """Busca CPF na Base de Clientes e retorna dados do cliente - VERSÃO MELHORADA"""
+        """
+        Implementa: =PROCV(B27;'Base de Clientes'!C:D;2;FALSO)
+        Busca CPF na Base de Clientes e retorna dados do cliente
+        """
         is_valid, cpf_clean = ValidadorCPF.validar_cpf(cpf_busca)
         if not is_valid:
             logger.error(f"CPF inválido: {cpf_busca}")
@@ -130,42 +96,40 @@ class BuscadorCliente:
         try:
             wb = load_workbook(self.arquivo_excel, data_only=True)
             
-            if 'Base de Clientes' not in wb.sheetnames:
-                logger.error("Planilha 'Base de Clientes' não encontrada")
+            if 'Base de Clientes ' not in wb.sheetnames:
+                logger.error("Planilha 'Base de Clientes ' não encontrada")
                 wb.close()
                 return None
             
-            ws = wb['Base de Clientes']
+            ws = wb['Base de Clientes ']
             
-            # BUSCA MELHORADA: múltiplas estratégias
-            for row in range(3, ws.max_row + 1):
-                cpf_cell = ws.cell(row=row, column=4).value
-                nome_cliente = ws.cell(row=row, column=3).value
+            # Buscar CPF na coluna B (índice 2) - começando da linha 2 (dados reais)
+            for row in range(2, ws.max_row + 1):
+                cpf_cell = ws.cell(row=row, column=2).value  # Coluna B - CPF
                 
-                # Estratégia 1: CPF exato
                 if cpf_cell:
                     cpf_cell_limpo = ValidadorCPF.limpar_cpf(cpf_cell)
                     if cpf_cell_limpo == cpf_clean:
-                        dados = self._extrair_dados_cliente(ws, row)
+                        # Extrair dados conforme estrutura da planilha (13 colunas)
+                        dados = {
+                            'cpf': cpf_clean,
+                            'cliente': str(ws.cell(row=row, column=1).value or ''),  # Coluna A - Cliente
+                            'empreendimento': str(ws.cell(row=row, column=3).value or ''),  # Coluna C - Empreendimento
+                            'sigla': str(ws.cell(row=row, column=4).value or ''),  # Coluna D - Sigla
+                            'unidade': str(ws.cell(row=row, column=5).value or ''),  # Coluna E - Unidade
+                            'nome_social': str(ws.cell(row=row, column=6).value or ''),  # Coluna F - Nome Social
+                            'cnpj_empreendimento': str(ws.cell(row=row, column=7).value or ''),  # Coluna G - CNPJ Empreendimento
+                            'endereco': str(ws.cell(row=row, column=8).value or ''),  # Coluna H - Endereço
+                            'numero': str(ws.cell(row=row, column=9).value or ''),  # Coluna I - Número
+                            'bairro': str(ws.cell(row=row, column=10).value or ''),  # Coluna J - Bairro
+                            'cidade': str(ws.cell(row=row, column=12).value or ''),  # Coluna L - Cidade
+                            'estado': str(ws.cell(row=row, column=11).value or ''),  # Coluna K - Estado
+                            'valor_venda': self._converter_valor_venda(ws.cell(row=row, column=13).value)  # Coluna M - Valor de Venda
+                        }
+                        
                         wb.close()
-                        logger.info(f"Cliente encontrado por CPF exato: {dados['cliente']}")
+                        logger.info(f"Cliente encontrado: {dados['cliente']} - Empreendimento: {dados['empreendimento']}")
                         return dados
-                
-                # Estratégia 2: CPF parcial (caso tenha formatação diferente)
-                elif cpf_cell and cpf_clean in str(cpf_cell).replace('.', '').replace('-', ''):
-                    dados = self._extrair_dados_cliente(ws, row)
-                    dados['cpf'] = cpf_clean  # Normalizar CPF
-                    wb.close()
-                    logger.info(f"Cliente encontrado por CPF parcial: {dados['cliente']}")
-                    return dados
-                
-                # Estratégia 3: CPF no nome (caso esteja incorreto na planilha)
-                elif nome_cliente and cpf_clean in str(nome_cliente):
-                    dados = self._extrair_dados_cliente(ws, row)
-                    dados['cpf'] = cpf_clean
-                    wb.close()
-                    logger.info(f"Cliente encontrado por CPF no nome: {dados['cliente']}")
-                    return dados
             
             wb.close()
             logger.warning(f"CPF não encontrado: {cpf_clean}")
@@ -175,88 +139,34 @@ class BuscadorCliente:
             logger.error(f"Erro ao buscar cliente: {str(e)}")
             return None
     
-    def buscar_por_nome(self, nome_cliente):
-        """Busca cliente por nome na Base de Clientes"""
+    def _converter_valor_venda(self, valor):
+        """Converte o valor da venda para float, tratando casos especiais"""
+        if valor is None:
+            return 0
+        
+        valor_str = str(valor).strip()
+        
+        # Se for "Verificar" ou similar, retorna 0
+        if valor_str.lower() in ['verificar', 'verificar ', 'n/a', '', 'verificar']:
+            return 0
+        
         try:
-            wb = load_workbook(self.arquivo_excel, data_only=True)
-            
-            if 'Base de Clientes' not in wb.sheetnames:
-                logger.error("Planilha 'Base de Clientes' não encontrada")
-                wb.close()
-                return None
-            
-            ws = wb['Base de Clientes']
-            
-            for row in range(3, ws.max_row + 1):
-                nome_cell = ws.cell(row=row, column=3).value
-                
-                if nome_cell and nome_cliente.lower() in str(nome_cell).lower():
-                    dados = self._extrair_dados_cliente(ws, row)
-                    wb.close()
-                    logger.info(f"Cliente encontrado por nome: {dados['cliente']}")
-                    return dados
-            
-            wb.close()
-            logger.warning(f"Nome não encontrado: {nome_cliente}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Erro ao buscar cliente por nome: {str(e)}")
-            return None
+            return float(valor_str)
+        except (ValueError, TypeError):
+            return 0
 
 class CalculadorFinanceiro:
-    """Classe para cálculos financeiros"""
+    """Classe para cálculos financeiros - IMPLEMENTA FÓRMULAS EXCEL"""
     
     def __init__(self, arquivo_excel):
         self.arquivo_excel = arquivo_excel
-        self.buscador = BuscadorCliente(arquivo_excel)
     
-    def _normalizar_nome(self, nome):
-        """Normaliza nome para comparação"""
-        import unicodedata
-        if not nome:
-            return ""
-        # Remover acentos
-        nome_normalizado = unicodedata.normalize('NFD', str(nome))
-        nome_sem_acentos = ''.join(c for c in nome_normalizado if unicodedata.category(c) != 'Mn')
-        return nome_sem_acentos.upper().strip()
-    
-    def _nomes_sao_similares(self, nome1, nome2, threshold=0.8):
-        """Verifica se dois nomes são similares o suficiente"""
-        nome1_norm = self._normalizar_nome(nome1)
-        nome2_norm = self._normalizar_nome(nome2)
-        
-        # Se são exatamente iguais
-        if nome1_norm == nome2_norm:
-            return True
-        
-        # Dividir em palavras
-        palavras1 = [p for p in nome1_norm.split() if len(p) > 2]
-        palavras2 = [p for p in nome2_norm.split() if len(p) > 2]
-        
-        if not palavras1 or not palavras2:
-            return False
-        
-        # Contar palavras em comum
-        palavras_comuns = 0
-        for palavra1 in palavras1:
-            for palavra2 in palavras2:
-                if palavra1 == palavra2:
-                    palavras_comuns += 1
-                    break
-        
-        # Calcular similaridade
-        max_palavras = max(len(palavras1), len(palavras2))
-        similaridade = palavras_comuns / max_palavras
-        
-        return similaridade >= threshold
-
-    def _calcular_valor_por_tipo(self, cpf_cliente, tipo_busca):
+    def calcular_receita_bruta(self, cpf_cliente):
         """
-        Calcula valor baseado no tipo de busca - VERSÃO CORRIGIDA
-        
-        Receita Bruta: =SOMASES('UNION - 2024'!G:G;'UNION - 2024'!P:P;"RECEITA BRUTA";'UNION - 2024'!E:E;NOME_CLIENTE)
-        Despesas: =SOMASES('UNION - 2024'!G:G,'UNION - 2024'!P:P,"ATIVO CIRCULANTE",'UNION - 2024'!E:E,NOME_CLIENTE)
+        Implementa: =SOMASES('UNION - 2024'!G:G;'UNION - 2024'!P:P;"RECEITA BRUTA";'UNION - 2024'!E:E;Declaração!B27)
+        G:G = ENTRADA (coluna 3)
+        P:P = DIVISÃO - 1º NÍVEL (coluna 4) 
+        E:E = CLIENTE (coluna 2)
         """
         try:
             wb = load_workbook(self.arquivo_excel, data_only=True)
@@ -266,118 +176,132 @@ class CalculadorFinanceiro:
                 wb.close()
                 return 0
             
-            ws = wb['UNION - 2024']
-            total = 0
-            registros_encontrados = 0
-            
-            dados_cliente = self.buscador.buscar_por_cpf(cpf_cliente)
-            if not dados_cliente:
+            # Primeiro, buscar o nome do cliente na Base de Clientes
+            if 'Base de Clientes ' not in wb.sheetnames:
+                logger.error("Planilha 'Base de Clientes ' não encontrada")
                 wb.close()
                 return 0
             
-            nome_cliente = dados_cliente['cliente']
-            logger.info(f"Calculando {tipo_busca} para cliente: {nome_cliente}")
+            ws_base = wb['Base de Clientes ']
+            nome_cliente = None
             
-            # BUSCA MELHORADA: usar similaridade de nomes
+            # Buscar nome do cliente por CPF
+            for row in range(2, ws_base.max_row + 1):
+                cpf_cell = ws_base.cell(row=row, column=2).value  # Coluna B - CPF
+                
+                if cpf_cell:
+                    cpf_cell_limpo = re.sub(r'[^\d]', '', str(cpf_cell))
+                    cpf_cliente_limpo = re.sub(r'[^\d]', '', str(cpf_cliente))
+                    
+                    if cpf_cell_limpo == cpf_cliente_limpo:
+                        nome_cliente = ws_base.cell(row=row, column=1).value  # Coluna A - Cliente
+                        break
+            
+            if not nome_cliente:
+                logger.warning(f"Nome do cliente não encontrado para CPF: {cpf_cliente}")
+                wb.close()
+                return 0
+            
+            logger.info(f"Buscando dados para cliente: {nome_cliente}")
+            
+            # Agora buscar na UNION - 2024 pelo nome do cliente
+            ws = wb['UNION - 2024']
+            total = 0
+            
+            # Buscar por nome do cliente na coluna B e tipo "RECEITA BRUTA" na coluna D
             for row in range(2, ws.max_row + 1):
-                cliente_col_e = ws.cell(row=row, column=5).value  # Coluna E - Nome do cliente
-                tipo_col_p = ws.cell(row=row, column=16).value    # Coluna P - Tipo (RECEITA BRUTA, ATIVO CIRCULANTE)
-                valor_col_g = ws.cell(row=row, column=7).value    # Coluna G - Valor a somar
+                cliente_col_b = ws.cell(row=row, column=2).value  # Coluna B - CLIENTE
+                tipo_col_d = ws.cell(row=row, column=4).value  # Coluna D - DIVISÃO - 1º NÍVEL
+                valor_col_c = ws.cell(row=row, column=3).value  # Coluna C - ENTRADA
                 
-                # Verificar se o tipo está correto
-                if not (tipo_col_p and tipo_busca in str(tipo_col_p).upper()):
-                    continue
-                
-                # Verificar se há valor válido
-                if not (valor_col_g and isinstance(valor_col_g, (int, float))):
-                    continue
-                
-                # CORREÇÃO: verificar apenas por CPF (mais seguro)
-                cpf_col_f = ws.cell(row=row, column=6).value  # Coluna F - CPF
-                if cpf_col_f and str(cpf_cliente).replace('.', '').replace('-', '') in str(cpf_col_f).replace('.', '').replace('-', ''):
-                    nome_planilha = str(cliente_col_e).strip() if cliente_col_e else "N/A"
-                    total += float(valor_col_g)
-                    registros_encontrados += 1
-                    logger.debug(f"{tipo_busca} encontrado por CPF: R$ {valor_col_g:,.2f} para {nome_planilha} (CPF: {cpf_col_f})")
+                if (cliente_col_b and nome_cliente.lower() in str(cliente_col_b).lower() and
+                    tipo_col_d and "RECEITA BRUTA" in str(tipo_col_d).upper() and
+                    valor_col_c and isinstance(valor_col_c, (int, float))):
+                    total += float(valor_col_c)
+                    logger.debug(f"Receita bruta encontrada: R$ {valor_col_c:,.2f} - Cliente: {cliente_col_b}")
             
             wb.close()
-            logger.info(f"{tipo_busca} total: R$ {total:,.2f} ({registros_encontrados} registros)")
+            logger.info(f"Receita bruta total: R$ {total:,.2f}")
             return total
             
         except Exception as e:
-            logger.error(f"Erro ao calcular {tipo_busca}: {str(e)}")
+            logger.error(f"Erro ao calcular receita bruta: {str(e)}")
             return 0
     
-    def calcular_receita_bruta(self, cpf_cliente):
-        """Calcula receita bruta"""
-        return self._calcular_valor_por_tipo(cpf_cliente, "RECEITA BRUTA")
-    
     def calcular_despesas_acessorias(self, cpf_cliente):
-        """Calcula despesas acessórias"""
-        return self._calcular_valor_por_tipo(cpf_cliente, "ATIVO CIRCULANTE")
-    
-    def calcular_saldo_union(self, cpf_cliente):
-        """Calcula saldo Union"""
-        return self._calcular_valor_por_tipo(cpf_cliente, "RECEITA BRUTA")
-    
-    def verificar_saldo_paggo_dunning(self, cpf_cliente):
-        """Verifica saldo Paggo e Dunning - Implementa fórmula Excel"""
+        """
+        Implementa: =SOMASES('UNION - 2024'!G:G,'UNION - 2024'!P:P,"ATIVO CIRCULANTE",'UNION - 2024'!E:E,Declaração!B27)
+        G:G = ENTRADA (coluna 3)
+        P:P = DIVISÃO - 1º NÍVEL (coluna 4)
+        E:E = CLIENTE (coluna 2)
+        """
         try:
             wb = load_workbook(self.arquivo_excel, data_only=True)
             
-            if 'UNIFICADA ERP (paggo e dunning)' not in wb.sheetnames:
-                logger.error("Planilha 'UNIFICADA ERP (paggo e dunning)' não encontrada")
+            if 'UNION - 2024' not in wb.sheetnames:
+                logger.error("Planilha 'UNION - 2024' não encontrada")
                 wb.close()
                 return 0
             
-            # Buscar dados do cliente primeiro
-            dados_cliente = self.buscador.buscar_por_cpf(cpf_cliente)
-            if not dados_cliente:
+            # Primeiro, buscar o nome do cliente na Base de Clientes
+            if 'Base de Clientes ' not in wb.sheetnames:
+                logger.error("Planilha 'Base de Clientes ' não encontrada")
                 wb.close()
                 return 0
             
-            ws = wb['UNIFICADA ERP (paggo e dunning)']
-            saldo_total = 0
+            ws_base = wb['Base de Clientes ']
+            nome_cliente = None
             
-            logger.info(f"Verificando saldo Paggo/Dunning para cliente: {dados_cliente['cliente']}")
-            
-            # Implementa: =SOMASES('UNIFICADA ERP (paggo e dunning)'!Q:Q;'UNIFICADA ERP (paggo e dunning)'!F:F;CPF;'UNIFICADA ERP (paggo e dunning)'!B:B;EMPREENDIMENTO)
-            for row in range(2, ws.max_row + 1):
-                cpf_col_f = ws.cell(row=row, column=6).value  # Coluna F
-                empreend_col_b = ws.cell(row=row, column=2).value  # Coluna B
-                valor_col_q = ws.cell(row=row, column=17).value  # Coluna Q
+            # Buscar nome do cliente por CPF
+            for row in range(2, ws_base.max_row + 1):
+                cpf_cell = ws_base.cell(row=row, column=2).value  # Coluna C - CPF
                 
-                if (cpf_col_f and str(dados_cliente['cpf']) in str(cpf_col_f) and
-                    empreend_col_b and dados_cliente['empreendimento'] in str(empreend_col_b) and
-                    valor_col_q and isinstance(valor_col_q, (int, float))):
-                    saldo_total += float(valor_col_q)
-                    logger.debug(f"Saldo Paggo/Dunning encontrado: R$ {valor_col_q:,.2f} - CPF: {cpf_col_f}, Empreend: {empreend_col_b}")
+                if cpf_cell:
+                    cpf_cell_limpo = re.sub(r'[^\d]', '', str(cpf_cell))
+                    cpf_cliente_limpo = re.sub(r'[^\d]', '', str(cpf_cliente))
+                    
+                    if cpf_cell_limpo == cpf_cliente_limpo:
+                        nome_cliente = ws_base.cell(row=row, column=1).value  # Coluna B - Cliente
+                        break
+            
+            if not nome_cliente:
+                logger.warning(f"Nome do cliente não encontrado para CPF: {cpf_cliente}")
+                wb.close()
+                return 0
+            
+            # Agora buscar na UNION - 2024 pelo nome do cliente
+            ws = wb['UNION - 2024']
+            total = 0
+            
+            # Buscar por nome do cliente na coluna B e tipo "ATIVO CIRCULANTE" na coluna D
+            for row in range(2, ws.max_row + 1):
+                cliente_col_b = ws.cell(row=row, column=2).value  # Coluna B - CLIENTE
+                tipo_col_d = ws.cell(row=row, column=4).value  # Coluna D - DIVISÃO - 1º NÍVEL
+                valor_col_c = ws.cell(row=row, column=3).value  # Coluna C - ENTRADA
+                
+                if (cliente_col_b and nome_cliente.lower() in str(cliente_col_b).lower() and
+                    tipo_col_d and "ATIVO CIRCULANTE" in str(tipo_col_d).upper() and
+                    valor_col_c and isinstance(valor_col_c, (int, float))):
+                    total += float(valor_col_c)
+                    logger.debug(f"Despesa acessória encontrada: R$ {valor_col_c:,.2f} - Cliente: {cliente_col_b}")
             
             wb.close()
-            logger.info(f"Saldo Paggo/Dunning total: R$ {saldo_total:,.2f}")
-            return saldo_total
+            logger.info(f"Despesas acessórias total: R$ {total:,.2f}")
+            return total
             
         except Exception as e:
-            logger.error(f"Erro ao verificar saldo Paggo/Dunning: {str(e)}")
+            logger.error(f"Erro ao calcular despesas acessórias: {str(e)}")
             return 0
-
-class ValidadorConsistencia:
-    """Classe para validação de consistência dos dados"""
     
-    @staticmethod
-    def validar_saldos(saldo_union, saldo_paggo_dunning):
-        """Valida se saldo Union é diferente de saldo Paggo e Dunning"""
-        if abs(saldo_union - saldo_paggo_dunning) > 0.01:
-            diferenca = saldo_union - saldo_paggo_dunning
-            logger.warning(f"Inconsistência detectada: Saldo Union ({saldo_union:,.2f}) != Saldo Paggo/Dunning ({saldo_paggo_dunning:,.2f})")
-            logger.warning(f"Diferença: R$ {diferenca:,.2f}")
-            return False, diferenca
-        else:
-            logger.info("Saldos consistentes")
-            return True, 0
+    def calcular_saldo_union(self, cpf_cliente):
+        """
+        Implementa: =SOMASES('UNION - 2024'!G:G;'UNION - 2024'!P:P;"RECEITA BRUTA";'UNION - 2024'!E:E;C3)
+        Calcula saldo Union baseado no CPF
+        """
+        return self.calcular_receita_bruta(cpf_cliente)  # Mesma lógica da receita bruta
 
 class GeradorPDF:
-    """Classe para geração de PDF"""
+    """Classe para geração de PDF - MANTIDA COMO ESTAVA"""
     
     def __init__(self):
         self.config = config
@@ -437,7 +361,6 @@ class GeradorPDF:
                 logger.warning(f"Logo do Ministério não encontrado: {logo_ministerio_path}")
                 logo_ministerio = None
             else:
-                # Brasão menor conforme solicitado
                 logo_ministerio = Image(logo_ministerio_path, width=0.5*inch, height=0.5*inch)
             
             # Criar texto central
@@ -458,7 +381,6 @@ class GeradorPDF:
             
             # Criar seção direita com texto e brasão lado a lado
             if logo_ministerio:
-                # Criar tabela interna para texto + brasão lado a lado
                 texto_ministerio = Paragraph(
                     """<para align=center>
                     <b>MINISTÉRIO DA<br/>
@@ -482,15 +404,14 @@ class GeradorPDF:
                 ministerio_table = Table(ministerio_data, colWidths=[1.3*inch, 0.6*inch])
                 ministerio_table.setStyle(TableStyle([
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),  # Texto
-                    ('ALIGN', (1, 0), (1, -1), 'CENTER'),  # Brasão
+                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                    ('ALIGN', (1, 0), (1, -1), 'CENTER'),
                     ('LEFTPADDING', (0, 0), (-1, -1), 0),
                     ('RIGHTPADDING', (0, 0), (-1, -1), 0),
                     ('TOPPADDING', (0, 0), (-1, -1), 0),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
                 ]))
                 
-                # Dados da tabela principal (3 colunas: Hype, Centro, Ministério+Brasão)
                 if logo_hype:
                     header_data = [[logo_hype, texto_central, ministerio_table]]
                     col_widths = [1.2*inch, 3.9*inch, 1.9*inch]
@@ -498,7 +419,6 @@ class GeradorPDF:
                     header_data = [[texto_central, ministerio_table]]
                     col_widths = [5.1*inch, 1.9*inch]
             else:
-                # Sem brasão, apenas texto
                 texto_direito = Paragraph(
                     """<para align=center>
                     <b>MINISTÉRIO DA<br/>
@@ -542,7 +462,6 @@ class GeradorPDF:
             
         except Exception as e:
             logger.error(f"Erro ao criar cabeçalho: {str(e)}")
-            # Retornar cabeçalho simples em caso de erro
             return Paragraph(
                 "<para align=center><b>ANO-CALENDÁRIO DE 2024<br/>IMPOSTO DE RENDA - PESSOA FÍSICA</b></para>",
                 ParagraphStyle(
@@ -557,8 +476,8 @@ class GeradorPDF:
     
     def _criar_tabela_pj(self, dados_cliente):
         """Cria tabela da pessoa jurídica"""
-        nome_empresa = dados_cliente.get('nome_empresa', 'HYPE EMPREENDIMENTOS')
-        cnpj_empresa = dados_cliente.get('cnpj_empresa', '41.081.989/0001-92')
+        nome_empresa = "HYPE EMPREENDIMENTOS"
+        cnpj_empresa = "41.081.989/0001-92"
         
         pj_data = [[f"Nome Empresarial: {nome_empresa} - {cnpj_empresa}"]]
         pj_table = Table(pj_data, colWidths=[7*inch])
@@ -609,12 +528,25 @@ class GeradorPDF:
         estado = dados_cliente.get('estado', '')
         endereco_completo = f"{endereco}, {numero} - {bairro}, {cidade} - {estado}"
         
-        valor_venda = dados_cliente.get('valor_venda', 0)
-        valor_imovel = f"R$ {valor_venda:,.2f}" if valor_venda > 0 else "Verificar"
-        
-        empreendimento = dados_cliente.get('empreendimento', '')
+        sigla = dados_cliente.get('sigla', '')
         unidade = dados_cliente.get('unidade', '')
-        produto_texto = f"{empreendimento} - {unidade}"
+        
+        # Montar produto com sigla + unidade
+        if sigla and unidade:
+            produto_texto = f"{sigla} - {unidade}"
+        elif sigla:
+            produto_texto = sigla
+        elif unidade:
+            produto_texto = unidade
+        else:
+            produto_texto = "Verificar"
+        
+        # Valor do imóvel
+        valor_venda = dados_cliente.get('valor_venda', 0)
+        if valor_venda and isinstance(valor_venda, (int, float)) and valor_venda > 0:
+            valor_imovel = f"R$ {valor_venda:,.2f}"
+        else:
+            valor_imovel = "Verificar"
         
         bem_data = [
             ['Produto', produto_texto],
@@ -727,7 +659,7 @@ class GeradorPDF:
                 parent=normal_style,
                 fontName='Helvetica',
                 fontSize=10,
-                alignment=TA_CENTER,  # Centralizar o texto
+                alignment=TA_CENTER,
                 textColor=colors.black,
                 leading=12
             )
@@ -745,7 +677,7 @@ class GeradorPDF:
             return None
 
 class GeradorIR:
-    """Classe principal do gerador de IR"""
+    """Classe principal do gerador de IR - VERSÃO SIMPLIFICADA"""
     
     def __init__(self):
         from config import FILES_CONFIG
@@ -784,16 +716,6 @@ class GeradorIR:
         
         logger.info(f"Valores calculados - Receita: R$ {receita_bruta:,.2f}, Despesas: R$ {despesas_acessorias:,.2f}")
         
-        # Validar consistência dos saldos
-        saldo_union = self.calculador.calcular_saldo_union(cpf_clean)
-        saldo_paggo_dunning = self.calculador.verificar_saldo_paggo_dunning(cpf_clean)
-        
-        is_consistente, diferenca = ValidadorConsistencia.validar_saldos(saldo_union, saldo_paggo_dunning)
-        
-        if not is_consistente:
-            logger.warning(f"Inconsistência nos saldos detectada. Diferença: R$ {diferenca:,.2f}")
-            print(f"⚠️  ATENÇÃO: Inconsistência nos saldos detectada. Diferença: R$ {diferenca:,.2f}")
-        
         # Gerar PDF
         nome_pdf = self.gerador_pdf.gerar_declaracao(cpf_clean, dados_cliente, valores_calculados)
         
@@ -806,7 +728,7 @@ class GeradorIR:
 
 def main():
     """Função principal"""
-    print("🏢 GERADOR DE DECLARAÇÃO DE IR - VERSÃO REFATORADA 3.0")
+    print("🏢 GERADOR DE DECLARAÇÃO DE IR - VERSÃO SIMPLIFICADA")
     print("=" * 60)
     
     gerador = GeradorIR()
@@ -852,464 +774,5 @@ def main():
             logger.error(f"Erro no menu principal: {str(e)}")
             print(f"❌ Erro: {str(e)}")
 
-def testar_implementacao():
-    """Função para testar a implementação completa"""
-    print("🧪 TESTANDO IMPLEMENTAÇÃO COMPLETA")
-    print("=" * 50)
-    
-    gerador = GeradorIR()
-    
-    # Teste 1: CPF válido da configuração
-    cpf_teste = config['TEST']['TEST_CPF']
-    print(f"\n📋 Teste 1: CPF da configuração ({cpf_teste})")
-    
-    sucesso, resultado = gerador.gerar_declaracao(cpf_teste)
-    if sucesso:
-        print(f"✅ SUCESSO: {resultado}")
-    else:
-        print(f"❌ FALHA: {resultado}")
-    
-    # Teste 2: CPF conhecido dos logs
-    cpf_conhecido = "91446260968"
-    print(f"\n📋 Teste 2: CPF conhecido ({cpf_conhecido})")
-    
-    sucesso, resultado = gerador.gerar_declaracao(cpf_conhecido)
-    if sucesso:
-        print(f"✅ SUCESSO: {resultado}")
-    else:
-        print(f"❌ FALHA: {resultado}")
-    
-    # Teste 3: Busca por nome
-    print(f"\n📋 Teste 3: Busca por nome")
-    dados_cliente = gerador.buscador.buscar_por_nome("Fabio Roberto")
-    if dados_cliente:
-        print(f"✅ Cliente encontrado: {dados_cliente['cliente']}")
-        print(f"   CPF: {dados_cliente['cpf']}")
-        print(f"   Empreendimento: {dados_cliente['empreendimento']}")
-    else:
-        print(f"❌ Cliente não encontrado")
-    
-    print(f"\n🏁 TESTE CONCLUÍDO")
-
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--test":
-        testar_implementacao()
-    else:
-        main()
-
-# Funções de interface para o servidor Flask
-def buscar_cliente_por_cpf(cpf):
-    """Interface para buscar cliente por CPF - VERSÃO OTIMIZADA"""
-    try:
-        # Cache para busca de clientes
-        if not hasattr(buscar_cliente_por_cpf, '_client_cache'):
-            buscar_cliente_por_cpf._client_cache = {}
-            buscar_cliente_por_cpf._cache_timestamp = None
-        
-        # Verificar cache
-        cache_key = f"client_{cpf}"
-        if cache_key in buscar_cliente_por_cpf._client_cache:
-            return buscar_cliente_por_cpf._client_cache[cache_key]
-        
-        # Carregar dados se cache expirado
-        if not buscar_cliente_por_cpf._cache_timestamp:
-            logger.info("Carregando cache de clientes...")
-            buscar_cliente_por_cpf._client_cache = {}
-            
-            from config import FILES_CONFIG
-            from openpyxl import load_workbook
-            
-            wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True, read_only=True)
-            
-            if 'Base de Clientes' in wb.sheetnames:
-                ws = wb['Base de Clientes']
-                
-                # Ler apenas as primeiras 1000 linhas para performance
-                for row in range(2, min(ws.max_row + 1, 1000)):
-                    cpf_col = ws.cell(row=row, column=3).value  # Coluna C - CPF
-                    nome_col = ws.cell(row=row, column=2).value  # Coluna B - Nome
-                    empreendimento_col = ws.cell(row=row, column=4).value  # Coluna D - Empreendimento
-                    
-                    if cpf_col and nome_col:
-                        cpf_clean = str(cpf_col).replace('.', '').replace('-', '')
-                        cache_key_client = f"client_{cpf_clean}"
-                        
-                        buscar_cliente_por_cpf._client_cache[cache_key_client] = {
-                            'cliente': str(nome_col).strip(),
-                            'cpf': str(cpf_col).strip(),
-                            'empreendimento': str(empreendimento_col).strip() if empreendimento_col else ''
-                        }
-            
-            wb.close()
-            buscar_cliente_por_cpf._cache_timestamp = True
-        
-        # Buscar no cache
-        cpf_clean = str(cpf).replace('.', '').replace('-', '')
-        cache_key_clean = f"client_{cpf_clean}"
-        
-        if cache_key_clean in buscar_cliente_por_cpf._client_cache:
-            logger.info(f"Cliente encontrado por CPF exato: {buscar_cliente_por_cpf._client_cache[cache_key_clean]['cliente']}")
-            return buscar_cliente_por_cpf._client_cache[cache_key_clean]
-        
-        # Busca por similaridade de CPF se não encontrou exato
-        for cached_cpf, cliente_data in buscar_cliente_por_cpf._client_cache.items():
-            if cpf_clean in cached_cpf or cached_cpf in cpf_clean:
-                logger.info(f"Cliente encontrado por CPF similar: {cliente_data['cliente']}")
-                return cliente_data
-        
-        logger.warning(f"Cliente não encontrado para CPF: {cpf}")
-        return None
-        
-    except Exception as e:
-        logger.error(f"Erro ao buscar cliente por CPF {cpf}: {str(e)}")
-        return None
-
-def _normalizar_nome_global(nome):
-    """Normaliza nome para comparação - função global"""
-    import unicodedata
-    if not nome:
-        return ""
-    # Remover acentos
-    nome_normalizado = unicodedata.normalize('NFD', str(nome))
-    nome_sem_acentos = ''.join(c for c in nome_normalizado if unicodedata.category(c) != 'Mn')
-    return nome_sem_acentos.upper().strip()
-
-def _nomes_sao_similares_global(nome1, nome2, threshold=0.9):
-    """Verifica se dois nomes são similares o suficiente - função global"""
-    nome1_norm = _normalizar_nome_global(nome1)
-    nome2_norm = _normalizar_nome_global(nome2)
-    
-    # Se são exatamente iguais
-    if nome1_norm == nome2_norm:
-        return True
-    
-    # Dividir em palavras
-    palavras1 = [p for p in nome1_norm.split() if len(p) > 2]
-    palavras2 = [p for p in nome2_norm.split() if len(p) > 2]
-    
-    if not palavras1 or not palavras2:
-        return False
-    
-    # Contar palavras em comum
-    palavras_comuns = 0
-    for palavra1 in palavras1:
-        for palavra2 in palavras2:
-            if palavra1 == palavra2:
-                palavras_comuns += 1
-                break
-    
-    # Calcular similaridade
-    max_palavras = max(len(palavras1), len(palavras2))
-    similaridade = palavras_comuns / max_palavras
-    
-    return similaridade >= threshold
-
-# Cache global para dados processados
-_excel_cache = {}
-_cache_timestamp = None
-_cache_file_path = None
-
-def _get_cache_key(cpf, dados_cliente):
-    """Gera chave única para cache"""
-    return f"{cpf}_{dados_cliente['cliente']}_{dados_cliente.get('empreendimento', '')}"
-
-def _is_cache_valid():
-    """Verifica se o cache ainda é válido"""
-    global _cache_timestamp, _cache_file_path
-    from config import FILES_CONFIG
-    import os
-    
-    if not _cache_timestamp or not _cache_file_path:
-        return False
-    
-    # Verificar se o arquivo Excel foi modificado
-    try:
-        current_mtime = os.path.getmtime(FILES_CONFIG['EXCEL_FILE'])
-        return current_mtime <= _cache_timestamp
-    except:
-        return False
-
-def _load_excel_data():
-    """Carrega dados do Excel de forma otimizada com cache"""
-    global _excel_cache, _cache_timestamp, _cache_file_path
-    from config import FILES_CONFIG
-    import os
-    
-    # Verificar se cache é válido
-    if _is_cache_valid():
-        logger.info("Usando cache de dados do Excel")
-        return _excel_cache
-    
-    logger.info("Carregando dados do Excel (cache expirado)")
-    
-    try:
-        # Carregar workbook
-        wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True, read_only=True)
-        
-        # Estrutura de dados otimizada
-        union_data = []
-        erp_data = []
-        
-        # Processar UNION-2024 de forma otimizada
-        if 'UNION - 2024' in wb.sheetnames:
-            ws_union = wb['UNION - 2024']
-            logger.info("Indexando dados UNION-2024...")
-            
-            # Ler apenas as colunas necessárias
-            for row in range(2, min(ws_union.max_row + 1, 2000)):  # Limitar a 2000 linhas
-                cliente = ws_union.cell(row=row, column=5).value
-                cpf = ws_union.cell(row=row, column=6).value
-                tipo = ws_union.cell(row=row, column=16).value
-                valor = ws_union.cell(row=row, column=7).value
-                
-                if cliente and tipo and valor and isinstance(valor, (int, float)):
-                    union_data.append({
-                        'cliente': str(cliente).strip(),
-                        'cpf': str(cpf).strip() if cpf else '',
-                        'tipo': str(tipo).upper(),
-                        'valor': float(valor)
-                    })
-        
-        # Processar UNIFICADA ERP de forma otimizada
-        if 'UNIFICADA ERP (paggo e dunning)' in wb.sheetnames:
-            ws_erp = wb['UNIFICADA ERP (paggo e dunning)']
-            logger.info("Indexando dados ERP...")
-            
-            # Ler apenas as colunas necessárias
-            for row in range(2, min(ws_erp.max_row + 1, 2000)):  # Limitar a 2000 linhas
-                empreendimento = ws_erp.cell(row=row, column=2).value
-                cpf = ws_erp.cell(row=row, column=6).value
-                valor = ws_erp.cell(row=row, column=17).value
-                
-                if valor and isinstance(valor, (int, float)):
-                    erp_data.append({
-                        'empreendimento': str(empreendimento).strip() if empreendimento else '',
-                        'cpf': str(cpf).strip() if cpf else '',
-                        'valor': float(valor)
-                    })
-        
-        wb.close()
-        
-        # Atualizar cache
-        _excel_cache = {
-            'union': union_data,
-            'erp': erp_data
-        }
-        _cache_timestamp = os.path.getmtime(FILES_CONFIG['EXCEL_FILE'])
-        _cache_file_path = FILES_CONFIG['EXCEL_FILE']
-        
-        logger.info(f"Cache atualizado: {len(union_data)} registros UNION, {len(erp_data)} registros ERP")
-        return _excel_cache
-        
-    except Exception as e:
-        logger.error(f"Erro ao carregar dados do Excel: {str(e)}")
-        return {'union': [], 'erp': []}
-
-def _match_cliente(nome_cliente, cpf_cliente, nome_planilha, cpf_planilha):
-    """Função otimizada para matching de cliente"""
-    # 1. Match por CPF (mais rápido)
-    if cpf_cliente and cpf_planilha:
-        cpf_clean = str(cpf_cliente).replace('.', '').replace('-', '')
-        cpf_planilha_clean = str(cpf_planilha).replace('.', '').replace('-', '')
-        if cpf_clean in cpf_planilha_clean or cpf_planilha_clean in cpf_clean:
-            return True, "CPF"
-    
-    # 2. Match por nome exato
-    if nome_cliente and nome_planilha:
-        if nome_cliente.strip().upper() == nome_planilha.strip().upper():
-            return True, "NOME_EXATO"
-    
-    # 3. Match por palavras-chave (otimizado)
-    if nome_cliente and nome_planilha:
-        palavras_cliente = set(p.strip().upper() for p in nome_cliente.split() if len(p.strip()) > 2)
-        palavras_planilha = set(p.strip().upper() for p in nome_planilha.split() if len(p.strip()) > 2)
-        
-        if len(palavras_cliente & palavras_planilha) >= 2:  # Interseção de conjuntos
-            return True, "NOME_SIMILAR"
-    
-    return False, ""
-
-def calcular_todos_valores_otimizado(cpf, dados_cliente):
-    """Calcula todos os valores financeiros com performance ultra-otimizada"""
-    try:
-        logger.info(f"Iniciando cálculo otimizado para {dados_cliente['cliente']}")
-        
-        # Carregar dados do Excel (com cache)
-        excel_data = _load_excel_data()
-        
-        receita_bruta = 0
-        despesas_acessorias = 0
-        saldo_union = 0
-        saldo_paggo_dunning = 0
-        
-        nome_cliente = dados_cliente['cliente']
-        cpf_cliente = dados_cliente['cpf']
-        empreendimento_cliente = dados_cliente.get('empreendimento', '')
-        
-        # Processar dados UNION (otimizado)
-        logger.info("Processando dados UNION...")
-        for registro in excel_data['union']:
-            match, match_type = _match_cliente(
-                nome_cliente, cpf_cliente,
-                registro['cliente'], registro['cpf']
-            )
-            
-            if match:
-                valor = registro['valor']
-                tipo = registro['tipo']
-                
-                if "RECEITA BRUTA" in tipo:
-                    receita_bruta += valor
-                    saldo_union += valor
-                    logger.debug(f"Receita encontrada ({match_type}): R$ {valor:,.2f}")
-                elif "ATIVO CIRCULANTE" in tipo:
-                    despesas_acessorias += valor
-                    logger.debug(f"Despesa encontrada ({match_type}): R$ {valor:,.2f}")
-        
-        # Processar dados ERP (otimizado)
-        logger.info("Processando dados ERP...")
-        for registro in excel_data['erp']:
-            # Match por CPF primeiro (mais rápido)
-            if cpf_cliente and registro['cpf']:
-                cpf_clean = str(cpf_cliente).replace('.', '').replace('-', '')
-                cpf_planilha_clean = str(registro['cpf']).replace('.', '').replace('-', '')
-                
-                if cpf_clean in cpf_planilha_clean or cpf_planilha_clean in cpf_clean:
-                    # Verificar empreendimento se disponível
-                    if empreendimento_cliente and registro['empreendimento']:
-                        if empreendimento_cliente in registro['empreendimento']:
-                            saldo_paggo_dunning += registro['valor']
-                            logger.debug(f"Saldo ERP encontrado (CPF+Emp): R$ {registro['valor']:,.2f}")
-                    else:
-                        # Aceitar só por CPF se não tem empreendimento
-                        saldo_paggo_dunning += registro['valor']
-                        logger.debug(f"Saldo ERP encontrado (CPF): R$ {registro['valor']:,.2f}")
-        
-        logger.info(f"Cálculo concluído - Receita: R$ {receita_bruta:,.2f}, Despesas: R$ {despesas_acessorias:,.2f}")
-        return receita_bruta, despesas_acessorias, saldo_union, saldo_paggo_dunning
-        
-    except Exception as e:
-        logger.error(f"Erro no cálculo otimizado: {str(e)}")
-        return 0, 0, 0, 0
-
-def calcular_valores_financeiros_manual(cpf, dados_cliente):
-    """Interface para calcular valores financeiros com diagnóstico detalhado - OTIMIZADO"""
-    try:
-        # Calcular todos os valores de uma vez (otimizado)
-        receita_bruta, despesas_acessorias, saldo_union, saldo_paggo_dunning = calcular_todos_valores_otimizado(cpf, dados_cliente)
-        
-        # Contar registros encontrados
-        registros_encontrados = 0
-        fontes_dados = []
-        
-        if receita_bruta > 0:
-            registros_encontrados += 1
-            fontes_dados.append(f"Receita Bruta: R$ {receita_bruta:,.2f} (UNION-2024)")
-        
-        if despesas_acessorias > 0:
-            registros_encontrados += 1
-            fontes_dados.append(f"Despesas: R$ {despesas_acessorias:,.2f} (UNION-2024)")
-        
-        if saldo_union > 0:
-            registros_encontrados += 1
-            fontes_dados.append(f"Saldo Union: R$ {saldo_union:,.2f} (UNION-2024)")
-        
-        if saldo_paggo_dunning > 0:
-            registros_encontrados += 1
-            fontes_dados.append(f"Saldo Paggo/Dunning: R$ {saldo_paggo_dunning:,.2f} (ERP)")
-        
-        # Verificar se existe diferença calculada na Base de Clientes (coluna S)
-        diferenca_base_clientes = None
-        try:
-            from config import FILES_CONFIG
-            from openpyxl import load_workbook
-            wb = load_workbook(FILES_CONFIG['EXCEL_FILE'], data_only=True, read_only=True)
-            if 'Base de Clientes' in wb.sheetnames:
-                ws_base = wb['Base de Clientes']
-                for row in range(2, ws_base.max_row + 1):
-                    cpf_col_c = ws_base.cell(row=row, column=3).value  # Coluna C - CPF
-                    diferenca_col_s = ws_base.cell(row=row, column=19).value  # Coluna S - Diferença
-                    
-                    if (cpf_col_c and str(cpf) in str(cpf_col_c) and 
-                        diferenca_col_s and isinstance(diferenca_col_s, (int, float)) and diferenca_col_s != 0):
-                        diferenca_base_clientes = float(diferenca_col_s)
-                        break
-            wb.close()
-        except Exception as e:
-            logger.warning(f"Erro ao verificar diferença na Base de Clientes: {str(e)}")
-        
-        # Preparar informações de consistência
-        erro_consistencia = None
-        pode_gerar_pdf = True  # SEMPRE pode gerar PDF agora
-        
-        # Se existe diferença na Base de Clientes, mostrar como informação
-        if diferenca_base_clientes is not None:
-            erro_consistencia = {
-                'tipo': 'DIFERENCA_INFORMATIVA',
-                'descricao': 'Diferença identificada entre Union e ERP',
-                'diferenca': diferenca_base_clientes,
-                'saldo_union': saldo_union,
-                'saldo_paggo': saldo_paggo_dunning,
-                'fonte': 'Base de Clientes - Coluna S',
-                'observacao': 'Esta diferença não impede a geração do PDF'
-            }
-        
-        # Verificar se tem dados suficientes
-        total_valores = receita_bruta + despesas_acessorias + saldo_union + saldo_paggo_dunning
-        
-        if total_valores == 0:
-            erro_consistencia = {
-                'tipo': 'SEM_DADOS_FINANCEIROS',
-                'descricao': 'Nenhum dado financeiro encontrado nas planilhas',
-                'detalhes': [
-                    'Cliente existe na Base de Clientes',
-                    'Mas não possui registros nas planilhas UNION-2024',
-                    'Nem na planilha UNIFICADA ERP (paggo e dunning)',
-                    'Verifique se os dados estão nas planilhas corretas'
-                ]
-            }
-            pode_gerar_pdf = False
-        
-        return {
-            'receita_bruta': receita_bruta,
-            'despesas_acessorias': despesas_acessorias,
-            'saldo_union': saldo_union,
-            'saldo_paggo_dunning': saldo_paggo_dunning,
-            'registros_encontrados': registros_encontrados,
-            'fontes_dados': fontes_dados,
-            'erro_consistencia': erro_consistencia,
-            'pode_gerar_pdf': pode_gerar_pdf,
-            'total_valores': total_valores
-        }
-        
-    except Exception as e:
-        logger.error(f"Erro ao calcular valores financeiros para CPF {cpf}: {str(e)}")
-        return {
-            'receita_bruta': 0,
-            'despesas_acessorias': 0,
-            'saldo_union': 0,
-            'saldo_paggo_dunning': 0,
-            'registros_encontrados': 0,
-            'fontes_dados': [],
-            'erro_consistencia': {
-                'tipo': 'ERRO_SISTEMA',
-                'descricao': f'Erro interno ao processar dados: {str(e)}',
-                'detalhes': ['Contate o suporte técnico']
-            },
-            'pode_gerar_pdf': False,
-            'total_valores': 0
-        }
-
-def gerar_pdf_declaracao(cpf, dados_cliente, valores_calculados):
-    """Interface para gerar PDF da declaração - VERSÃO OTIMIZADA"""
-    try:
-        # Cache para gerador de PDF
-        if not hasattr(gerar_pdf_declaracao, '_pdf_generator'):
-            gerar_pdf_declaracao._pdf_generator = GeradorPDF()
-        
-        # Gerar PDF usando cache
-        nome_pdf = gerar_pdf_declaracao._pdf_generator.gerar_declaracao(cpf, dados_cliente, valores_calculados)
-        return nome_pdf
-    except Exception as e:
-        logger.error(f"Erro ao gerar PDF para CPF {cpf}: {str(e)}")
-        return None 
+    main() 
