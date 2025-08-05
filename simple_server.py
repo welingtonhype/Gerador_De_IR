@@ -13,6 +13,13 @@ import re
 import logging
 from datetime import datetime
 from pathlib import Path
+# Configurar logging primeiro
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Import do gerador de PDF (opcional para funcionalidade básica)
 try:
     import sys
@@ -22,13 +29,6 @@ try:
 except ImportError as e:
     logger.warning(f"Gerador de PDF não disponível: {e}")
     PDF_GENERATOR_AVAILABLE = False
-
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # Inicializar Flask
 app = Flask(__name__)
