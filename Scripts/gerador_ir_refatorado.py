@@ -18,10 +18,24 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
+# Adicionar o diretório pai ao path para importar config
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from config import get_config
 
-config = get_config()
+try:
+    from config import get_config
+    config = get_config()
+except ImportError:
+    # Fallback se config.py não estiver disponível
+    config = {
+        'FILES': {
+            'EXCEL_FILE': 'IR 2024 - NÃO ALTERAR.xlsx',
+            'LOGS_DIR': 'logs',
+            'OUTPUT_DIR': 'output'
+        },
+        'TEST': {
+            'TEST_CPF': '91446260968'
+        }
+    }
 
 def setup_logging():
     """Configura logging"""
@@ -680,9 +694,8 @@ class GeradorIR:
     """Classe principal do gerador de IR - VERSÃO SIMPLIFICADA"""
     
     def __init__(self):
-        from config import FILES_CONFIG
-        self.config = FILES_CONFIG
-        self.arquivo_excel = FILES_CONFIG['EXCEL_FILE']
+        self.config = config
+        self.arquivo_excel = config['FILES']['EXCEL_FILE']
         self.buscador = BuscadorCliente(self.arquivo_excel)
         self.calculador = CalculadorFinanceiro(self.arquivo_excel)
         self.gerador_pdf = GeradorPDF()
@@ -752,8 +765,7 @@ def main():
                         print(f"❌ Erro: {resultado}")
             
             elif opcao == "2":
-                from config import FILES_CONFIG
-                cpf_teste = FILES_CONFIG['TEST']['TEST_CPF']
+                cpf_teste = config['TEST']['TEST_CPF']
                 print(f"Testando com CPF: {cpf_teste}")
                 sucesso, resultado = gerador.gerar_declaracao(cpf_teste)
                 if sucesso:

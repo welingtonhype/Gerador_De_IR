@@ -154,13 +154,9 @@ class ExcelProcessor:
             else:
                 logger.warning("Planilha 'UNION - 2024' não encontrada")
             
-            # Calcular valores da planilha ERP
-            if 'UNIFICADA ERP (paggo e dunning)' in wb.sheetnames:
-                ws_erp = wb['UNIFICADA ERP (paggo e dunning)']
-                valores['saldo_paggo_dunning'] = self._sum_erp_values(ws_erp, nome_cliente)
-                logger.info(f"Saldo ERP calculado: {valores['saldo_paggo_dunning']}")
-            else:
-                logger.warning("Planilha 'UNIFICADA ERP (paggo e dunning)' não encontrada")
+            # Planilha ERP não existe mais - manter valor como 0
+            valores['saldo_paggo_dunning'] = 0.0
+            logger.info("Planilha ERP não existe mais - saldo_paggo_dunning = 0.0")
             
             logger.info(f"Valores calculados para cliente {nome_cliente}: {valores}")
             return valores
@@ -177,9 +173,9 @@ class ExcelProcessor:
         logger.info(f"Buscando cliente '{nome_cliente}' com tipo '{tipo}' em {ws.max_row} linhas")
         
         for row in range(2, ws.max_row + 1):
-            nome_col = ws.cell(row=row, column=5).value  # Coluna E - Nome do cliente
-            tipo_col = ws.cell(row=row, column=16).value  # Coluna P - Tipo
-            valor_col = ws.cell(row=row, column=7).value  # Coluna G - Valor
+            nome_col = ws.cell(row=row, column=2).value  # Coluna B - Nome do cliente
+            tipo_col = ws.cell(row=row, column=4).value  # Coluna D - Tipo
+            valor_col = ws.cell(row=row, column=3).value  # Coluna C - Valor
             
             if (nome_col and nome_cliente.lower() in str(nome_col).lower() and
                 tipo_col and tipo in str(tipo_col) and
@@ -191,19 +187,7 @@ class ExcelProcessor:
         logger.info(f"Total encontrado para {tipo}: {total} (matches: {matches})")
         return total
     
-    def _sum_erp_values(self, ws, nome_cliente):
-        """Soma valores do ERP"""
-        total = 0.0
-        
-        for row in range(2, ws.max_row + 1):
-            nome_col = ws.cell(row=row, column=6).value  # Coluna F - Nome do cliente
-            valor_col = ws.cell(row=row, column=17).value  # Coluna Q - Valor
-            
-            if (nome_col and nome_cliente.lower() in str(nome_col).lower() and
-                valor_col and isinstance(valor_col, (int, float))):
-                total += float(valor_col)
-        
-        return total
+
 
 # Instância do processador
 excel_processor = ExcelProcessor(EXCEL_FILE)
