@@ -406,27 +406,33 @@ function displaySuccess(result) {
         
         if (result.cliente) {
             html += `<h3>Cliente Encontrado</h3>`;
-            html += `<p><strong>Nome:</strong> ${result.cliente.cliente || 'N/A'}</p>`;
+            html += `<p><strong>Nome:</strong> ${result.cliente.nome || 'N/A'}</p>`;
             html += `<p><strong>CPF:</strong> ${formatCpf(result.cliente.cpf || '')}</p>`;
+            html += `<p><strong>Empreendimento:</strong> ${result.cliente.empreendimento || 'N/A'}</p>`;
         }
         
         if (result.valores) {
             html += `<h3>Valores Calculados</h3>`;
-            html += `<p><strong>Receita Total:</strong> ${formatCurrency(result.valores.receita_total || 0)}</p>`;
-            html += `<p><strong>Despesas Total:</strong> ${formatCurrency(result.valores.despesas_total || 0)}</p>`;
-            html += `<p><strong>Registros Encontrados:</strong> ${result.valores.registros_encontrados || 0}</p>`;
+            html += `<p><strong>Receita Bruta:</strong> ${formatCurrency(result.valores.receita_bruta || 0)}</p>`;
+            html += `<p><strong>Despesas Acessórias:</strong> ${formatCurrency(result.valores.despesas_acessorias || 0)}</p>`;
+            html += `<p><strong>Saldo Union:</strong> ${formatCurrency(result.valores.saldo_union || 0)}</p>`;
         }
         
-        if (result.filename) {
-            html += `<h3>PDF Gerado</h3>`;
-            html += `<p><strong>Arquivo:</strong> ${result.filename}</p>`;
-            html += `<a href="/api/download-pdf/${result.filename}" class="btn btn-primary" download>Download PDF</a>`;
-        }
+        // Mostrar status de geração do PDF
+        html += `<h3>Gerando PDF...</h3>`;
+        html += `<div id="pdfStatus" style="margin-top: 10px;">
+            <p>📄 Gerando declaração de IR...</p>
+        </div>`;
         
         elements.clientInfo.innerHTML = html;
     }
     
     showSection('successSection');
+    
+    // Gerar PDF automaticamente
+    if (result.cliente && result.cliente.cpf) {
+        generatePDF(result.cliente.cpf);
+    }
 }
 
 function displayError(error) {
@@ -524,4 +530,68 @@ function formatCpf(cpf) {
     if (!cpf) return '';
     const clean = cpf.replace(/\D/g, '');
     return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
+
+async function generatePDF(cpf) {
+    console.log('Gerando PDF para CPF:', cpf);
+    
+    const pdfStatus = document.getElementById('pdfStatus');
+    if (pdfStatus) {
+        pdfStatus.innerHTML = '<p>📄 Gerando declaração de IR...</p>';
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/gerar-pdf`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ cpf: cpf }),
+            signal: AbortSignal.timeout(60000) // 1 minuto de timeout
+        });
+        
+        if (response.ok) {
+            // Verificar se é um PDF
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/pdf')) {
+                // Criar blob e download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `Declaracao_IR_${cpf}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                if (pdfStatus) {
+                    pdfStatus.innerHTML = '<p>✅ PDF gerado e baixado com sucesso!</p>';
+                }
+            } else {
+                // Tentar ler como JSON para ver se há erro
+                const errorText = await response.text();
+                console.error('Erro na geração do PDF:', errorText);
+                
+                if (pdfStatus) {
+                    pdfStatus.innerHTML = '<p>❌ Erro na geração do PDF</p>';
+                }
+            }
+        } else {
+            console.error('Erro HTTP:', response.status);
+            const errorText = await response.text();
+            console.error('Resposta de erro:', errorText);
+            
+            if (pdfStatus) {
+                pdfStatus.innerHTML = '<p>❌ Erro na geração do PDF</p>';
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao gerar PDF:', error);
+        
+        if (pdfStatus) {
+            pdfStatus.innerHTML = '<p>❌ Erro na geração do PDF</p>';
+        }
+    }
 }
