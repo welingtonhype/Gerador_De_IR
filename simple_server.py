@@ -121,6 +121,20 @@ class ExcelProcessor:
             wb = self._load_workbook()
             logger.info(f"Planilhas disponíveis: {wb.sheetnames}")
             
+            # Primeiro, buscar o nome do cliente pelo CPF
+            cliente = self.search_client(cpf)
+            if not cliente:
+                logger.error(f"Cliente não encontrado para CPF: {cpf}")
+                return {
+                    'receita_bruta': 0.0,
+                    'despesas_acessorias': 0.0,
+                    'saldo_union': 0.0,
+                    'saldo_paggo_dunning': 0.0
+                }
+            
+            nome_cliente = cliente['nome']
+            logger.info(f"Buscando valores para cliente: {nome_cliente}")
+            
             valores = {
                 'receita_bruta': 0.0,
                 'despesas_acessorias': 0.0,
@@ -132,8 +146,8 @@ class ExcelProcessor:
             if 'UNION - 2024' in wb.sheetnames:
                 ws_union = wb['UNION - 2024']
                 logger.info(f"Planilha UNION encontrada, linhas: {ws_union.max_row}")
-                valores['receita_bruta'] = self._sum_by_criteria(ws_union, cpf, "RECEITA BRUTA")
-                valores['despesas_acessorias'] = self._sum_by_criteria(ws_union, cpf, "ATIVO CIRCULANTE")
+                valores['receita_bruta'] = self._sum_by_criteria(ws_union, nome_cliente, "RECEITA BRUTA")
+                valores['despesas_acessorias'] = self._sum_by_criteria(ws_union, nome_cliente, "ATIVO CIRCULANTE")
                 valores['saldo_union'] = valores['receita_bruta']
                 logger.info(f"Receita bruta calculada: {valores['receita_bruta']}")
                 logger.info(f"Despesas acessórias calculadas: {valores['despesas_acessorias']}")
@@ -143,49 +157,49 @@ class ExcelProcessor:
             # Calcular valores da planilha ERP
             if 'UNIFICADA ERP (paggo e dunning)' in wb.sheetnames:
                 ws_erp = wb['UNIFICADA ERP (paggo e dunning)']
-                valores['saldo_paggo_dunning'] = self._sum_erp_values(ws_erp, cpf)
+                valores['saldo_paggo_dunning'] = self._sum_erp_values(ws_erp, nome_cliente)
                 logger.info(f"Saldo ERP calculado: {valores['saldo_paggo_dunning']}")
             else:
                 logger.warning("Planilha 'UNIFICADA ERP (paggo e dunning)' não encontrada")
             
-            logger.info(f"Valores calculados para CPF {cpf}: {valores}")
+            logger.info(f"Valores calculados para cliente {nome_cliente}: {valores}")
             return valores
             
         except Exception as e:
             logger.error(f"Erro ao calcular valores: {str(e)}")
             return valores
     
-    def _sum_by_criteria(self, ws, cpf, tipo):
+    def _sum_by_criteria(self, ws, nome_cliente, tipo):
         """Soma valores por critérios"""
         total = 0.0
         matches = 0
         
-        logger.info(f"Buscando CPF {cpf} com tipo '{tipo}' em {ws.max_row} linhas")
+        logger.info(f"Buscando cliente '{nome_cliente}' com tipo '{tipo}' em {ws.max_row} linhas")
         
         for row in range(2, ws.max_row + 1):
-            cpf_col = ws.cell(row=row, column=5).value  # Coluna E
-            tipo_col = ws.cell(row=row, column=16).value  # Coluna P
-            valor_col = ws.cell(row=row, column=7).value  # Coluna G
+            nome_col = ws.cell(row=row, column=5).value  # Coluna E - Nome do cliente
+            tipo_col = ws.cell(row=row, column=16).value  # Coluna P - Tipo
+            valor_col = ws.cell(row=row, column=7).value  # Coluna G - Valor
             
-            if (cpf_col and str(cpf) in str(cpf_col) and
+            if (nome_col and nome_cliente.lower() in str(nome_col).lower() and
                 tipo_col and tipo in str(tipo_col) and
                 valor_col and isinstance(valor_col, (int, float))):
                 total += float(valor_col)
                 matches += 1
-                logger.info(f"Match encontrado na linha {row}: CPF={cpf_col}, Tipo={tipo_col}, Valor={valor_col}")
+                logger.info(f"Match encontrado na linha {row}: Nome={nome_col}, Tipo={tipo_col}, Valor={valor_col}")
         
         logger.info(f"Total encontrado para {tipo}: {total} (matches: {matches})")
         return total
     
-    def _sum_erp_values(self, ws, cpf):
+    def _sum_erp_values(self, ws, nome_cliente):
         """Soma valores do ERP"""
         total = 0.0
         
         for row in range(2, ws.max_row + 1):
-            cpf_col = ws.cell(row=row, column=6).value  # Coluna F
-            valor_col = ws.cell(row=row, column=17).value  # Coluna Q
+            nome_col = ws.cell(row=row, column=6).value  # Coluna F - Nome do cliente
+            valor_col = ws.cell(row=row, column=17).value  # Coluna Q - Valor
             
-            if (cpf_col and str(cpf) in str(cpf_col) and
+            if (nome_col and nome_cliente.lower() in str(nome_col).lower() and
                 valor_col and isinstance(valor_col, (int, float))):
                 total += float(valor_col)
         
